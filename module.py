@@ -1,6 +1,7 @@
 import jax
 
 class Param(object):
+    """Represents a parameter of a Module, and specifies its shape and initialization."""
     def __init__(self, shape, initializer, desc=None):
         self.shape = shape
         self.initializer = initializer
@@ -16,9 +17,6 @@ class Param(object):
             return f'Param({self.shape}, {self.initializer})'
 
 class Module(object):
-    def __init__(self):
-        pass
-
     def __call__(self, cx, *args, **kwargs):
         return self.forward(cx, *args, **kwargs)
 
@@ -60,6 +58,7 @@ and all children. May be overriden."""
 
 
 class Context(object):
+    """Basically just a dictionary of tensors identified by a Param."""
     def __init__(self, parameters):
         self.parameters = parameters
         self.values = {id(p) : None for p in self.parameters}

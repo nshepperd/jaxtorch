@@ -2,7 +2,7 @@ import jax
 import jax.numpy as jnp
 import random
 
-from module import Module
+from module import Module, PRNG, Context, ParamState
 import init
 
 class Linear(Module):
@@ -22,6 +22,15 @@ class Tanh(Module):
     def forward(self, cx, x):
         return jax.numpy.tanh(x)
 
+class Dropout(Module):
+  def __init__(self, rate=0.5):
+    self.rate = rate
+
+  def forward(self, cx, x):
+    key = cx.rng.split()
+    p = jax.random.bernoulli(key, 1.0 - self.rate, shape=x.shape)
+    return x * p / (1.0 - self.rate)
+
 class Sequential(Module):
     def __init__(self, *modules):
         self.modules = modules
@@ -40,10 +49,10 @@ class SGD(object):
     def __init__(self, parameters):
         self.parameters = list(parameters)
 
-    def step(self, cx, grad, lr):
-        new_values = cx.clone()
+    def step(self, px, grad, lr):
+        new_values = px.clone()
         for p in self.parameters:
-            new_values[p] = cx[p] - grad[p] * lr
+            new_values[p] = px[p] - grad[p] * lr
         return new_values
 
 def square(x):
@@ -55,6 +64,7 @@ class MLP(Module):
     def __init__(self):
         self.layers = Sequential(Linear(2, 3),
                                  Tanh(),
+                                 # Dropout(0.9),
                                  Linear(3, 1),
                                  Tanh(),
                                  Linear(1,1))
@@ -64,9 +74,6 @@ class MLP(Module):
 
 model = MLP()
 
-def loss(cx, x, y):
-    return square(model(cx, x) - y).mean()
-loss_grad = jax.value_and_grad(loss)
 
 # XOR
 data = [
@@ -78,9 +85,16 @@ data = [
 
 opt = SGD(model.parameters())
 
-cx = model.ctx()
-cx.initialize(jax.random.PRNGKey(0))
-print(model.state_dict(cx))
+rng = PRNG(jax.random.PRNGKey(0))
+
+px = ParamState(model.parameters())
+px.initialize(rng.split())
+print(model.state_dict(px))
+
+def loss(px, x, y, key):
+    cx = Context(px, key)
+    return square(model(cx, x) - y).mean()
+loss_grad = jax.jit(jax.value_and_grad(loss))
 
 counter = 1
 while True:
@@ -92,7 +106,8 @@ while True:
         ys.append(jnp.array(y, dtype=jnp.float32))
     x = jnp.stack(xs)
     y = jnp.stack(ys)
-    v_loss, v_grad = loss_grad(cx, x, y)
-    cx = opt.step(cx, v_grad, lr=0.01)
-    print(counter, v_loss)
+    v_loss, v_grad = loss_grad(px, x, y, key=rng.split())
+    px = opt.step(px, v_grad, lr=0.01)
+    if counter % 10 == 0:
+        print(counter, v_loss)
     counter += 1

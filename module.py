@@ -16,11 +16,73 @@ class Param(object):
         else:
             return f'Param({self.shape}, {self.initializer})'
 
+class PRNG(object):
+    """Just a stateful wrapper for a jax.random.PRNGKey."""
+    def __init__(self, key):
+        self.key = key
+    def split(self):
+        (self.key, subkey) = jax.random.split(self.key)
+        return subkey
+
+class ParamState(object):
+    """Just a dictionary of tensors identified by Param."""
+    def __init__(self, parameters):
+        self.parameters = parameters
+        self.values = {id(p) : None for p in self.parameters}
+
+    def initialize(self, key):
+        for par in self.parameters:
+            (key, subkey) = jax.random.split(key)
+            self.values[id(par)] = par.initialize(key=key)
+
+    def clone(self):
+        cx = ParamState(self.parameters)
+        cx.values = dict(self.values)
+        return cx
+
+    def merge(self, other):
+        cx = ParamState(list(set(self.parameters) + set(other.parameters)))
+        cx.values = dict(self.values)
+        cx.values.update(other.values)
+        return cx
+
+    def __getitem__(self, par):
+        return self.values[id(par)]
+
+    def __setitem__(self, par, v):
+        self.values[id(par)] = v
+
+    @staticmethod
+    def flatten(cx):
+        return ([cx.values], cx.parameters)
+
+    @staticmethod
+    def unflatten(aux, values):
+        cx = ParamState(aux)
+        cx.values = dict(values[0])
+        return cx
+
+jax.tree_util.register_pytree_node(
+    ParamState,
+    ParamState.flatten,
+    ParamState.unflatten,
+)
+
+class Context(object):
+    """Wraps a ParamState and a PRNG."""
+    def __init__(self, px, key):
+        self.px = px
+        self.rng = PRNG(key)
+
+    def __getitem__(self, par):
+        return self.px[par]
+
+
 class Module(object):
-    def __call__(self, cx, *args, **kwargs):
+    def __call__(self, cx: Context, *args, **kwargs):
         return self.forward(cx, *args, **kwargs)
 
-    def forward(self, cx, *args, **kwargs):
+    def forward(self, cx: Context, *args, **kwargs):
         """Implements the forward pass. Must take cx as the first argument."""
         raise NotImplementedError
 
@@ -40,57 +102,18 @@ and all children. May be overriden."""
     def parameters(self):
         return [p for (k, p) in self.gen_named_parameters()]
 
-    def ctx(self):
-        return Context(self.parameters())
+    def mkstate(self):
+        return ParamState(self.parameters())
 
-    def state_dict(self, cx):
+    def state_dict(self, px: ParamState):
         state = {}
         for (k, p) in self.gen_named_parameters():
-            state[k] = cx[p]
+            state[k] = px[p]
         return state
 
-    def load_state_dict(self, cx, state):
+    def load_state_dict(self, px: ParamState, state):
         for (k, p) in self.gen_named_parameters():
             if k in state:
-                cx[p] = state[k]
+                px[p] = state[k]
             else:
                 print(f'Not loading missing parameter: {k}')
-
-
-class Context(object):
-    """Basically just a dictionary of tensors identified by a Param."""
-    def __init__(self, parameters):
-        self.parameters = parameters
-        self.values = {id(p) : None for p in self.parameters}
-
-    def initialize(self, key):
-        for par in self.parameters:
-            (key, subkey) = jax.random.split(key)
-            self.values[id(par)] = par.initialize(key=key)
-
-    def clone(self):
-        cx = Context(self.parameters)
-        cx.values = dict(self.values)
-        return cx
-
-    def __getitem__(self, par):
-        return self.values[id(par)]
-
-    def __setitem__(self, par, v):
-        self.values[id(par)] = v
-
-    @staticmethod
-    def flatten(cx):
-        return ([cx.values], cx.parameters)
-
-    @staticmethod
-    def unflatten(parameters, values):
-        cx = Context(parameters)
-        cx.values = dict(values[0])
-        return cx
-
-jax.tree_util.register_pytree_node(
-    Context,
-    Context.flatten,
-    Context.unflatten,
-)

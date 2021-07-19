@@ -2,8 +2,8 @@ import jax
 import jax.numpy as jnp
 import random
 
-from module import Module, PRNG, Context, ParamState
-import init
+from jaxtorch import Module, PRNG, Context, ParamState
+from jaxtorch import init
 
 class Linear(Module):
     def __init__(self, c1, c2):
@@ -73,7 +73,6 @@ class MLP(Module):
         return self.layers(cx, x)
 
 model = MLP()
-
 
 # XOR
 data = [

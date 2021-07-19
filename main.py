@@ -46,18 +46,27 @@ class SGD(object):
             new_values[p] = cx[p] - grad[p] * lr
         return new_values
 
-model = Sequential(Linear(2, 3), Tanh(), Linear(3, 1), Tanh(), Linear(1,1))
-
 def square(x):
     return x*x
+
+# Now implement a xor solver:
+
+class MLP(Module):
+    def __init__(self):
+        self.layers = Sequential(Linear(2, 3),
+                                 Tanh(),
+                                 Linear(3, 1),
+                                 Tanh(),
+                                 Linear(1,1))
+
+    def forward(self, cx, x):
+        return self.layers(cx, x)
+
+model = MLP()
 
 def loss(cx, x, y):
     return square(model(cx, x) - y).mean()
 loss_grad = jax.value_and_grad(loss)
-
-cx = model.ctx()
-cx.initialize(jax.random.PRNGKey(0))
-print(model.state_dict(cx))
 
 # XOR
 data = [
@@ -68,6 +77,10 @@ data = [
 ]
 
 opt = SGD(model.parameters())
+
+cx = model.ctx()
+cx.initialize(jax.random.PRNGKey(0))
+print(model.state_dict(cx))
 
 counter = 1
 while True:

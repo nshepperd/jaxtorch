@@ -1,1 +1,1 @@
-from jaxtorch.module import *
+from jaxtorch.core import *

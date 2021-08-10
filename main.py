@@ -4,46 +4,7 @@ import random
 
 from jaxtorch import Module, PRNG, Context, ParamState
 from jaxtorch import init
-
-class Linear(Module):
-    def __init__(self, c1, c2):
-        self.c1 = c1
-        self.c2 = c2
-        self.weight = init.normal(c1, c2)
-        self.bias = init.zeros(c2)
-
-    def __repr__(self):
-        return f'Linear({self.c1}, {self.c2})'
-
-    def forward(self, cx, x):
-        return x @ cx[self.weight] + cx[self.bias]
-
-class Tanh(Module):
-    def forward(self, cx, x):
-        return jax.numpy.tanh(x)
-
-class Dropout(Module):
-  def __init__(self, rate=0.5):
-    self.rate = rate
-
-  def forward(self, cx, x):
-    key = cx.rng.split()
-    p = jax.random.bernoulli(key, 1.0 - self.rate, shape=x.shape)
-    return x * p / (1.0 - self.rate)
-
-class Sequential(Module):
-    def __init__(self, *modules):
-        self.modules = modules
-
-    def forward(self, cx, x):
-        for module in self.modules:
-            x = module(cx, x)
-        return x
-
-    def gen_named_parameters(self):
-        for (i, m) in enumerate(self.modules):
-            for (k, p) in m.gen_named_parameters():
-                yield (f'{i}.{k}', p)
+from jaxtorch import nn
 
 class SGD(object):
     def __init__(self, parameters):
@@ -62,12 +23,12 @@ def square(x):
 
 class MLP(Module):
     def __init__(self):
-        self.layers = Sequential(Linear(2, 3),
-                                 Tanh(),
-                                 # Dropout(0.9),
-                                 Linear(3, 1),
-                                 Tanh(),
-                                 Linear(1,1))
+        self.layers = nn.Sequential(nn.Linear(2, 3),
+                                    nn.Tanh(),
+                                    # nn.Dropout(0.9),
+                                    nn.Linear(3, 1),
+                                    nn.Tanh(),
+                                    nn.Linear(1,1))
 
     def forward(self, cx, x):
         return self.layers(cx, x)

@@ -1,4 +1,6 @@
 import jax
+import numpy as np
+import functools
 
 class Param(object):
     """Represents a parameter of a Module, and specifies its shape and initialization."""
@@ -36,31 +38,38 @@ class ParamState(object):
             self.values[id(par)] = par.initialize(key=key)
 
     def clone(self):
-        cx = ParamState(self.parameters)
-        cx.values = dict(self.values)
-        return cx
+        px = ParamState(self.parameters)
+        px.values = dict(self.values)
+        return px
 
     def merge(self, other):
-        cx = ParamState(list(set(self.parameters) + set(other.parameters)))
-        cx.values = dict(self.values)
-        cx.values.update(other.values)
-        return cx
+        """Returns the right-biased union of two dictionaries."""
+        px = ParamState(list(set(self.parameters) + set(other.parameters)))
+        px.values = dict(self.values)
+        px.values.update(other.values)
+        return px
 
     def __getitem__(self, par):
-        return self.values[id(par)]
+        if isinstance(par, Param):
+            return self.values[id(par)]
+        else:
+            raise TypeError('Expected a Param for indexing into ParamState')
 
     def __setitem__(self, par, v):
-        self.values[id(par)] = v
+        if isinstance(par, Param):
+            self.values[id(par)] = v
+        else:
+            raise TypeError('Expected a Param for indexing into ParamState')
 
     @staticmethod
-    def flatten(cx):
-        return ([cx.values], cx.parameters)
+    def flatten(px):
+        return ([px.values], px.parameters)
 
     @staticmethod
     def unflatten(aux, values):
-        cx = ParamState(aux)
-        cx.values = dict(values[0])
-        return cx
+        px = ParamState(aux)
+        px.values = dict(values[0])
+        return px
 
 jax.tree_util.register_pytree_node(
     ParamState,
@@ -75,8 +84,10 @@ class Context(object):
         self.rng = PRNG(key)
 
     def __getitem__(self, par):
-        return self.px[par]
-
+        if isinstance(par, Param):
+            return self.px[par]
+        else:
+            raise TypeError('Expected a Param for indexing into Context')
 
 class Module(object):
     def __call__(self, cx: Context, *args, **kwargs):
@@ -86,9 +97,20 @@ class Module(object):
         """Implements the forward pass. Must take cx as the first argument."""
         raise NotImplementedError
 
+    def gen_named_modules(self):
+        """Returns a generator that yields a sequence of (str, Module) for this
+        and all children. May be overriden.
+        """
+        for (name, val) in self.__dict__.items():
+            if isinstance(val, Module):
+                yield (name, val)
+                for (k, v) in val.gen_named_modules():
+                    yield (name+'.'+k, v)
+
     def gen_named_parameters(self):
         """Returns a generator that yields a sequence of (str, Param) for this
-and all children. May be overriden."""
+        and all children. May be overriden.
+        """
         for (name, val) in self.__dict__.items():
             if isinstance(val, Module):
                 for (k, v) in val.gen_named_parameters():
@@ -108,12 +130,12 @@ and all children. May be overriden."""
     def state_dict(self, px: ParamState):
         state = {}
         for (k, p) in self.gen_named_parameters():
-            state[k] = px[p]
+            state[k] = np.array(px[p])
         return state
 
     def load_state_dict(self, px: ParamState, state):
         for (k, p) in self.gen_named_parameters():
             if k in state:
-                px[p] = state[k]
+                px[p] = jax.numpy.asarray(state[k])
             else:
                 print(f'Not loading missing parameter: {k}')

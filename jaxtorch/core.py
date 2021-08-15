@@ -1,6 +1,8 @@
 import jax
+import jaxlib
 import numpy as np
 import functools
+import jaxtorch.monkeypatches
 
 class Param(object):
     """Represents a parameter of a Module, and specifies its shape and initialization."""
@@ -8,12 +10,15 @@ class Param(object):
         self.shape = shape
         self.initializer = initializer
         self.desc = desc
+        self.name = None
 
     def initialize(self, key):
         return self.initializer(key=key, shape=self.shape)
 
     def __repr__(self):
-        if self.desc:
+        if self.name is not None:
+            return f'Param({self.name})'
+        elif self.desc:
             return self.desc
         else:
             return f'Param({self.shape}, {self.initializer})'
@@ -30,12 +35,12 @@ class ParamState(object):
     """Just a dictionary of tensors identified by Param."""
     def __init__(self, parameters):
         self.parameters = parameters
-        self.values = {id(p) : None for p in self.parameters}
+        self.values = {p : None for p in self.parameters}
 
     def initialize(self, key):
         for par in self.parameters:
             (key, subkey) = jax.random.split(key)
-            self.values[id(par)] = par.initialize(key=key)
+            self.values[par] = par.initialize(key=key)
 
     def clone(self):
         px = ParamState(self.parameters)
@@ -51,24 +56,26 @@ class ParamState(object):
 
     def __getitem__(self, par):
         if isinstance(par, Param):
-            return self.values[id(par)]
+            if self.values[par] is None:
+                raise KeyError('Attempted to access uninitialized parameter:', par)
+            return self.values[par]
         else:
             raise TypeError('Expected a Param for indexing into ParamState')
 
     def __setitem__(self, par, v):
         if isinstance(par, Param):
-            self.values[id(par)] = v
+            self.values[par] = v
         else:
             raise TypeError('Expected a Param for indexing into ParamState')
 
     @staticmethod
     def flatten(px):
-        return ([px.values], px.parameters)
+        return ([{id(par): val for (par, val) in px.values.items()}], px.parameters)
 
     @staticmethod
     def unflatten(aux, values):
         px = ParamState(aux)
-        px.values = dict(values[0])
+        px.values = {par : values[0][id(par)] for par in aux}
         return px
 
 jax.tree_util.register_pytree_node(
@@ -96,6 +103,11 @@ class Module(object):
     def forward(self, cx: Context, *args, **kwargs):
         """Implements the forward pass. Must take cx as the first argument."""
         raise NotImplementedError
+
+    def labeled_parameters_(self):
+        for (name, par) in self.named_parameters():
+            par.name = name
+        return self.parameters()
 
     def gen_named_modules(self):
         """Returns a generator that yields a sequence of (str, Module) for this
@@ -136,6 +148,9 @@ class Module(object):
     def load_state_dict(self, px: ParamState, state):
         for (k, p) in self.gen_named_parameters():
             if k in state:
-                px[p] = jax.numpy.asarray(state[k])
+                if px[p].shape == state[k].shape:
+                    px[p] = jax.numpy.asarray(state[k])
+                else:
+                    print(f'Not loading parameter from incompatible shape: {k} ({px[p].shape} vs {state[k].shape})')
             else:
                 print(f'Not loading missing parameter: {k}')

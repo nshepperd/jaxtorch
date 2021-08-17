@@ -4,6 +4,17 @@ import numpy as np
 import functools
 import jaxtorch.monkeypatches
 
+def _addindent(s_, numSpaces):
+    s = s_.split('\n')
+    # don't do anything for single-line stuff
+    if len(s) == 1:
+        return s_
+    first = s.pop(0)
+    s = [(numSpaces * ' ') + line for line in s]
+    s = '\n'.join(s)
+    s = first + '\n' + s
+    return s
+
 class Param(object):
     """Represents a parameter of a Module, and specifies its shape and initialization."""
     def __init__(self, shape, initializer, desc=None):
@@ -154,3 +165,43 @@ class Module(object):
                     print(f'Not loading parameter from incompatible shape: {k} ({px[p].shape} vs {state[k].shape})')
             else:
                 print(f'Not loading missing parameter: {k}')
+
+
+    def _get_name(self):
+        return self.__class__.__name__
+
+    def extra_repr(self) -> str:
+        r"""Set the extra representation of the module
+
+        To print customized extra information, you should re-implement
+        this method in your own modules. Both single-line and multi-line
+        strings are acceptable.
+        """
+        return ''
+
+    def __repr__(self):
+        # We treat the extra repr like the sub-module, one item per line
+        extra_lines = []
+        extra_repr = self.extra_repr()
+        # empty string will be split into list ['']
+        if extra_repr:
+            extra_lines = extra_repr.split('\n')
+        child_lines = []
+        for key, module in self.__dict__.items():
+            if isinstance(module, Module):
+                mod_str = repr(module)
+                mod_str = _addindent(mod_str, 2)
+                child_lines.append('(' + key + '): ' + mod_str)
+        lines = extra_lines + child_lines
+
+        main_str = self._get_name() + '('
+        if lines:
+            # simple one-liner info, which most builtin Modules will use
+            if len(extra_lines) == 1 and not child_lines:
+                main_str += extra_lines[0]
+            else:
+                main_str += '\n  ' + '\n  '.join(lines) + '\n'
+
+        main_str += ')'
+        return main_str
+

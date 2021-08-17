@@ -51,17 +51,15 @@ class Sequential(ModuleList):
         return x
 
 class Linear(Module):
-    def __init__(self, c1, c2, bias=True):
-        self.c1 = c1
-        self.c2 = c2
-        self.weight = init.glorot_normal(c2, c1)
+    def __init__(self, in_features: int, out_features: int, bias: bool = True):
+        super().__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+        self.weight = init.glorot_normal(out_features, in_features)
         if bias:
-            self.bias = init.zeros(c2)
+            self.bias = init.zeros(out_features)
         else:
             self.bias = None
-
-    def __repr__(self):
-        return f'Linear({self.c1}, {self.c2})'
 
     def forward(self, cx, x):
         y = x @ jnp.transpose(cx[self.weight])
@@ -69,17 +67,36 @@ class Linear(Module):
             y = y + cx[self.bias]
         return y
 
-class Embedding(Module):
-    def __init__(self, n, c):
-        self.n = n
-        self.c = c
-        self.weight = init.normal(n, c)
+    def extra_repr(self) -> str:
+        return 'in_features={}, out_features={}, bias={}'.format(
+            self.in_features, self.out_features, self.bias is not None
+        )
 
-    def __repr__(self):
-        return f'Embedding({self.n}, {self.c})'
+
+class Embedding(Module):
+    def __init__(self, num_embeddings: int, embedding_dim: int):
+        super().__init__()
+        self.num_embeddings = num_embeddings
+        self.embedding_dim = embedding_dim
+        self.weight = init.normal(num_embeddings, embedding_dim)
 
     def forward(self, cx, x):
         return cx[self.weight][x]
+
+    def extra_repr(self) -> str:
+        s = '{num_embeddings}, {embedding_dim}'
+        # if self.padding_idx is not None:
+        #     s += ', padding_idx={padding_idx}'
+        # if self.max_norm is not None:
+        #     s += ', max_norm={max_norm}'
+        # if self.norm_type != 2:
+        #     s += ', norm_type={norm_type}'
+        # if self.scale_grad_by_freq is not False:
+        #     s += ', scale_grad_by_freq={scale_grad_by_freq}'
+        # if self.sparse is not False:
+        #     s += ', sparse=True'
+        return s.format(**self.__dict__)
+
 
 
 class Tanh(Module):

@@ -32,17 +32,9 @@ class ModuleList(Module):
     def forward(self, cx, x):
         raise NotImplementedError
 
-    def gen_named_modules(self):
+    def self_named_modules(self):
         for (i, m) in enumerate(self.modules):
             yield (f'{i}', m)
-            for (k, p) in m.gen_named_modules():
-                yield (f'{i}.{k}', p)
-
-    def gen_named_parameters(self):
-        for (i, m) in enumerate(self.modules):
-            for (k, p) in m.gen_named_parameters():
-                yield (f'{i}.{k}', p)
-
 
 class Sequential(ModuleList):
     def forward(self, cx, x):

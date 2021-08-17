@@ -115,31 +115,44 @@ class Module(object):
         """Implements the forward pass. Must take cx as the first argument."""
         raise NotImplementedError
 
+    def self_named_modules(self):
+        """Yields a sequence of (str, Module) for direct children of this
+        module. May be overridden.
+
+        """
+        for (name, val) in self.__dict__.items():
+            if isinstance(val, Module):
+                yield (name, val)
+
+    def self_named_parameters(self):
+        """Yields a sequence of (str, Param) for direct children of this
+        module. May be overridden.
+
+        """
+        for (name, val) in self.__dict__.items():
+            if isinstance(val, Param):
+                yield (name, val)
+
     def labeled_parameters_(self):
         for (name, par) in self.named_parameters():
             par.name = name
         return self.parameters()
 
     def gen_named_modules(self):
-        """Returns a generator that yields a sequence of (str, Module) for this
-        and all children. May be overriden.
-        """
-        for (name, val) in self.__dict__.items():
-            if isinstance(val, Module):
-                yield (name, val)
-                for (k, v) in val.gen_named_modules():
-                    yield (name+'.'+k, v)
+        "Yields (str, Module) for all descendants of this module."
+        for (name, val) in self.self_named_modules():
+            yield (name, val)
+            for (k, v) in val.gen_named_modules():
+                yield (name+'.'+k, v)
 
     def gen_named_parameters(self):
-        """Returns a generator that yields a sequence of (str, Param) for this
-        and all children. May be overriden.
-        """
-        for (name, val) in self.__dict__.items():
-            if isinstance(val, Module):
-                for (k, v) in val.gen_named_parameters():
-                    yield (name+'.'+k, v)
-            elif isinstance(val, Param):
-                yield (name, val)
+        "Yields (str, Param) for this module and all descendants."
+        for (name, par) in self.self_named_parameters():
+            yield (name, par)
+
+        for (name, mod) in self.self_named_modules():
+            for (k, v) in mod.gen_named_parameters():
+                yield (name+'.'+k, v)
 
     def named_parameters(self):
         return list(self.gen_named_parameters())
@@ -204,4 +217,3 @@ class Module(object):
 
         main_str += ')'
         return main_str
-

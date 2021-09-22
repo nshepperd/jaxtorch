@@ -1,4 +1,5 @@
 import jax
+import jax.numpy as jnp
 import jaxlib
 import numpy as np
 import functools
@@ -17,14 +18,10 @@ def _addindent(s_, numSpaces):
 
 class Param(object):
     """Represents a parameter of a Module, and specifies its shape and initialization."""
-    def __init__(self, shape, initializer, desc=None):
-        self.shape = shape
+    def __init__(self, initializer, desc=None):
         self.initializer = initializer
         self.desc = desc
         self.name = None
-
-    def initialize(self, key):
-        return self.initializer(key=key, shape=self.shape)
 
     def __repr__(self):
         if self.name is not None:
@@ -32,7 +29,7 @@ class Param(object):
         elif self.desc:
             return self.desc
         else:
-            return f'Param({self.shape}, {self.initializer})'
+            return f'Param({self.initializer})'
 
 class PRNG(object):
     """Just a stateful wrapper for a jax.random.PRNGKey."""
@@ -44,31 +41,22 @@ class PRNG(object):
 
 class ParamState(object):
     """Just a dictionary of tensors identified by Param."""
-    def __init__(self, parameters):
-        self.parameters = parameters
-        self.values = {p : None for p in self.parameters}
-
-    def initialize(self, key):
-        for par in self.parameters:
-            (key, subkey) = jax.random.split(key)
-            self.values[par] = par.initialize(key=key)
+    def __init__(self, values=None):
+        if values is None:
+            values = {}
+        self.values = values
 
     def clone(self):
-        px = ParamState(self.parameters)
-        px.values = dict(self.values)
-        return px
+        return ParamState(dict(self.values))
 
     def merge(self, other):
         """Returns the right-biased union of two dictionaries."""
-        px = ParamState(list(set(self.parameters) + set(other.parameters)))
-        px.values = dict(self.values)
+        px = self.clone()
         px.values.update(other.values)
         return px
 
     def __getitem__(self, par):
         if isinstance(par, Param):
-            if self.values[par] is None:
-                raise KeyError('Attempted to access uninitialized parameter:', par)
             return self.values[par]
         else:
             raise TypeError('Expected a Param for indexing into ParamState')
@@ -81,13 +69,11 @@ class ParamState(object):
 
     @staticmethod
     def flatten(px):
-        return ([{id(par): val for (par, val) in px.values.items()}], px.parameters)
+        return ([{id(par): val for (par, val) in px.values.items()}], set(px.values.keys()))
 
     @staticmethod
     def unflatten(aux, values):
-        px = ParamState(aux)
-        px.values = {par : values[0][id(par)] for par in aux}
-        return px
+        return ParamState({par : values[0][id(par)] for par in aux})
 
 jax.tree_util.register_pytree_node(
     ParamState,
@@ -95,17 +81,58 @@ jax.tree_util.register_pytree_node(
     ParamState.unflatten,
 )
 
+class ContextRandom(object):
+    """Lives inside a Context and provides convenience functions for
+random number generation that use the Context's stateful PRNG.
+
+    """
+    def __init__(self, rng):
+        self.rng = rng
+
+    def _wrap(f):
+        return lambda self, *args, **kwargs: f(self.rng.split(), *args, **kwargs)
+
+    bernoulli = _wrap(jax.random.bernoulli)
+    beta = _wrap(jax.random.beta)
+    categorical = _wrap(jax.random.categorical)
+    cauchy = _wrap(jax.random.cauchy)
+    choice = _wrap(jax.random.choice)
+    dirichlet = _wrap(jax.random.dirichlet)
+    double_sided_maxwell = _wrap(jax.random.double_sided_maxwell)
+    exponential = _wrap(jax.random.exponential)
+    gamma = _wrap(jax.random.gamma)
+    gumbel = _wrap(jax.random.gumbel)
+    laplace = _wrap(jax.random.laplace)
+    logistic = _wrap(jax.random.logistic)
+    maxwell = _wrap(jax.random.maxwell)
+    multivariate_normal = _wrap(jax.random.multivariate_normal)
+    normal = _wrap(jax.random.normal)
+    pareto = _wrap(jax.random.pareto)
+    permutation = _wrap(jax.random.permutation)
+    poisson = _wrap(jax.random.poisson)
+    rademacher = _wrap(jax.random.rademacher)
+    randint = _wrap(jax.random.randint)
+    shuffle = _wrap(jax.random.shuffle)
+    t = _wrap(jax.random.t)
+    truncated_normal = _wrap(jax.random.truncated_normal)
+    uniform = _wrap(jax.random.uniform)
+    weibull_min = _wrap(jax.random.weibull_min)
+
 class Context(object):
     """Wraps a ParamState and a PRNG."""
     def __init__(self, px, key):
         self.px = px
         self.rng = PRNG(key)
+        self.random = ContextRandom(self.rng)
 
     def __getitem__(self, par):
         if isinstance(par, Param):
             return self.px[par]
         else:
             raise TypeError('Expected a Param for indexing into Context')
+
+    def __setitem__(self, par, tensor):
+        self.px[par] = tensor
 
 class Module(object):
     def __call__(self, cx: Context, *args, **kwargs):
@@ -117,7 +144,7 @@ class Module(object):
 
     def self_named_modules(self):
         """Yields a sequence of (str, Module) for direct children of this
-        module. May be overridden.
+           module. May be overridden.
 
         """
         for (name, val) in self.__dict__.items():
@@ -126,12 +153,29 @@ class Module(object):
 
     def self_named_parameters(self):
         """Yields a sequence of (str, Param) for direct children of this
-        module. May be overridden.
+           module. May be overridden.
 
         """
         for (name, val) in self.__dict__.items():
             if isinstance(val, Param):
                 yield (name, val)
+
+    def self_init_weights(self, cx):
+        """Initializes weights for this network's parameters. May be overriden
+           for custom initialization. Child modules are initialized
+           before parents.
+
+        """
+        for (name, par) in self.self_named_parameters():
+            if par.initializer is not None:
+                cx[par] = par.initializer(cx.rng.split())
+
+    def init_weights(self, key):
+        cx = Context(ParamState(), key)
+        for module in self.gen_postorder_modules():
+            module.self_init_weights(cx)
+        self.self_init_weights(cx)
+        return cx.px
 
     def labeled_parameters_(self):
         for (name, par) in self.named_parameters():
@@ -144,6 +188,13 @@ class Module(object):
             yield (name, val)
             for (k, v) in val.gen_named_modules():
                 yield (name+'.'+k, v)
+
+    def gen_postorder_modules(self):
+        "Yields Module for all descendants of this module (postorder traversal)."
+        for (name, mod) in self.self_named_modules():
+            for submod in mod.gen_postorder_modules():
+                yield submod
+            yield mod
 
     def gen_named_parameters(self):
         "Yields (str, Param) for this module and all descendants."
@@ -159,9 +210,6 @@ class Module(object):
 
     def parameters(self):
         return [p for (k, p) in self.gen_named_parameters()]
-
-    def mkstate(self):
-        return ParamState(self.parameters())
 
     def state_dict(self, px: ParamState):
         state = {}

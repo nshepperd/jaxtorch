@@ -97,8 +97,7 @@ def test_groupnorm():
     new = jaxtorch.nn.GroupNorm(8, 32)
     old = torch.nn.GroupNorm(8, 32)
 
-    px = ParamState(new.parameters())
-    px.initialize(rng.split())
+    px = new.init_weights(rng.split())
 
     old.weight.data.copy_(totorch(px[new.weight]))
     old.bias.data.copy_(totorch(px[new.bias]))
@@ -106,9 +105,7 @@ def test_groupnorm():
     x = jax.random.normal(key=rng.split(), shape=[2, 32, 2])
     x_torch = totorch(x)
 
-    new_result = new(px, x)
+    cx = Context(px, rng.split())
+    new_result = new(cx, x)
     old_result = old(x_torch)
     check(old_result, new_result)
-
-if __name__ == '__main__':
-    test_conv2d()

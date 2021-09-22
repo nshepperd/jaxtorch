@@ -20,6 +20,7 @@ def register(**kwargs):
 register(
     square = lambda arr: arr**2,
     sqrt = lambda arr: jax.numpy.sqrt(arr),
+    abs = jax.numpy.abs,
     add = lambda a, b: a + b,
     sub = lambda a, b: a - b,
     div = lambda a, b: a / b,
@@ -28,4 +29,5 @@ register(
     clamp = lambda a, minval, maxval: jax.numpy.clip(a, a_min=minval, a_max=maxval),
     unsqueeze = lambda arr, axis=0: jax.numpy.expand_dims(arr, axis),
     rearrange = rearrange,
+    broadcast_to = jax.numpy.broadcast_to,
 )

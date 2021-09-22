@@ -212,21 +212,31 @@ class Module(object):
         return [p for (k, p) in self.gen_named_parameters()]
 
     def state_dict(self, px: ParamState):
+        """Return all parameters of this module indexed by full names."""
         state = {}
         for (k, p) in self.gen_named_parameters():
-            state[k] = np.array(px[p])
+            state[k] = px[p]
         return state
 
-    def load_state_dict(self, px: ParamState, state):
+    def load_state_dict(self, px: ParamState, state, strict=True):
+        """Load a previously saved state_dict into px."""
         for (k, p) in self.gen_named_parameters():
-            if k in state:
-                if px[p].shape == state[k].shape:
-                    px[p] = jax.numpy.asarray(state[k])
+            if k not in state:
+                if strict:
+                    raise ValueError(f'Not loading missing parameter: {k}')
                 else:
-                    print(f'Not loading parameter from incompatible shape: {k} ({px[p].shape} vs {state[k].shape})')
-            else:
-                print(f'Not loading missing parameter: {k}')
+                    print(f'Not loading missing parameter: {k}', file=sys.stderr)
+                    continue
 
+            if px[p].shape != state[k].shape:
+                msg = f'Not loading parameter from incompatible shape: {k} ({px[p].shape} vs {state[k].shape})'
+                if strict:
+                    raise ValueError(msg)
+                else:
+                    print(msg, file=sys.stderr)
+                    continue
+
+            px[p] = jax.numpy.asarray(state[k])
 
     def _get_name(self):
         return self.__class__.__name__

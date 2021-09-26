@@ -27,8 +27,8 @@ class Linear(jaxtorch.Module):
         else:
             self.bias = None
 
-        # The forward function accepts cx, a Context object as the first argument
-        # always. This provides random number generation as well as the parameters.
+    # The forward function accepts cx, a Context object as the first argument
+    # always. This provides random number generation as well as the parameters.
     def forward(self, cx: jaxtorch.Context, x):
         # Parameters are looked up in the context using the stored identifier.
         y = x @ jnp.transpose(cx[self.weight])

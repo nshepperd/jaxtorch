@@ -109,3 +109,18 @@ def test_groupnorm():
     new_result = new(cx, x)
     old_result = old(x_torch)
     check(old_result, new_result)
+
+@torch.no_grad()
+def test_dropout():
+    rng = PRNG(jax.random.PRNGKey(0))
+    module = jaxtorch.nn.Dropout() # defaults to p=0.5
+
+    px = module.init_weights(rng.split())
+
+    x = jax.random.normal(key=rng.split(), shape=[1, 32])
+    cx = Context(px, rng.split())
+
+    out_train = module(cx.train_mode_(), x)
+    assert (out_train != 0).sum() < 20
+    out_eval = module(cx.eval_mode_(), x)
+    assert (out_eval != 0).sum() == 32

@@ -124,6 +124,15 @@ class Context(object):
         self.px = px
         self.rng = PRNG(key)
         self.random = ContextRandom(self.rng)
+        self.mode = 'train'
+
+    def train_mode_(self):
+        self.mode = 'train'
+        return self
+
+    def eval_mode_(self):
+        self.mode = 'eval'
+        return self
 
     def __getitem__(self, par):
         if isinstance(par, Param):

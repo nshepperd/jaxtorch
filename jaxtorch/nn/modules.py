@@ -97,13 +97,14 @@ class Tanh(Module):
 
 
 class Dropout(Module):
-  def __init__(self, p=0.5):
-    self.rate = p
+    def __init__(self, p=0.5):
+        self.rate = p
 
-  def forward(self, cx, x):
-    key = cx.rng.split()
-    p = jax.random.bernoulli(key, 1.0 - self.rate, shape=x.shape)
-    return x * p / (1.0 - self.rate)
+    def forward(self, cx, x):
+        if cx.mode == 'eval':
+            return x
+        mask = cx.random.bernoulli(1.0 - self.rate, shape=x.shape)
+        return x * mask / (1.0 - self.rate)
 
 class GELU(Module):
     def forward(self, cx, x):

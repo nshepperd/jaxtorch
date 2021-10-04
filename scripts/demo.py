@@ -72,6 +72,10 @@ for (key, value) in model.state_dict(params).items():
 # layer.bias :
 # [0. 0. 0.]
 
+# Can save this state dict in pytorch format.
+jaxtorch.pt.save(model.state_dict(params), '/tmp/state_dict.pt')
+model.load_state_dict(params, jaxtorch.pt.load('/tmp/state_dict.pt'))
+
 def loss(params, key):
     # Context wraps params and a PRNG key.
     cx = jaxtorch.Context(params, key)

@@ -219,7 +219,7 @@ class Module(object):
         return state
 
     def load_state_dict(self, px: ParamState, state, strict=True):
-        """Load a previously saved state_dict into px."""
+        """Load a previously saved state_dict into px. Modifies px."""
         for (k, p) in self.gen_named_parameters():
             if k not in state:
                 if strict:

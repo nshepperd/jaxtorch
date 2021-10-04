@@ -1,3 +1,8 @@
+"""Load and save jax state dicts and other objects as pytorch
+checkpoint files.
+
+"""
+
 import jax
 import jax.numpy as jnp
 import jaxlib

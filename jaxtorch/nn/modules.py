@@ -110,6 +110,10 @@ class GELU(Module):
     def forward(self, cx, x):
         return jax.nn.gelu(x)
 
+class ReLU(Module):
+    def forward(self, cx, x):
+        return jax.nn.relu(x)
+
 class LayerNorm(Module):
     def __init__(self, *normalized_shape):
         self.normalized_shape = normalized_shape

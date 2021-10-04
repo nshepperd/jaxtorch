@@ -5,9 +5,6 @@ import jaxtorch
 from jaxtorch.core import Module, PRNG, Context, ParamState
 from jaxtorch import init
 
-def square(x):
-    return x**2
-
 class Identity(Module):
     def forward(self, cx, x):
         return x
@@ -37,11 +34,13 @@ class ModuleList(Module):
         for (i, m) in enumerate(self.modules):
             yield (f'{i}', m)
 
+
 class Sequential(ModuleList):
     def forward(self, cx, x):
         for module in self.modules:
             x = module(cx, x)
         return x
+
 
 class Linear(Module):
     def __init__(self, in_features: int, out_features: int, bias: bool = True):
@@ -120,7 +119,7 @@ class LayerNorm(Module):
 
     def forward(self, cx, x):
         mu = x.mean(axis=self.axes, keepdims=True)
-        sigma = jnp.sqrt(square(x - mu).mean(axis=self.axes, keepdims=True))
+        sigma = jnp.sqrt((x - mu).square().mean(axis=self.axes, keepdims=True))
         normed = (x - mu) / sigma
         return cx[self.weight] * normed + cx[self.bias]
 

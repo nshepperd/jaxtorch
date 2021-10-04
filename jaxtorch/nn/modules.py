@@ -1,3 +1,4 @@
+import math
 import jax
 import jax.numpy as jnp
 import jaxtorch
@@ -155,7 +156,7 @@ class Conv2d(Module):
         self.padding = padding
         self.dilation = dilation
         self.groups = groups
-        self.weight = init.glorot_normal(out_channels, in_channels//groups, kernel_size, kernel_size)
+        self.weight = init.kaiming_uniform(out_channels, in_channels//groups, kernel_size, kernel_size, a=math.sqrt(5.0))
         if zero_init:
             self.weight = init.zeros(out_channels, in_channels//groups, kernel_size, kernel_size)
         self.use_bias = bias

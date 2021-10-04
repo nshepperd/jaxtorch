@@ -1,3 +1,4 @@
+import math
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -24,9 +25,17 @@ def const(tensor):
 
 def glorot_normal(*shape):
     shape = jax.core.canonicalize_shape(shape)
-    stddev = np.sqrt(2.0 / (shape[0] + shape[1]))
+    fan_out = shape[0] * np.prod(shape[2:])
+    fan_in = shape[1] * np.prod(shape[2:])
+    stddev = np.sqrt(2.0 / (fan_in + fan_out))
     return core.Param(lambda key: stddev * jax.random.normal(key, shape), desc=mkdesc('glorot_normal', *shape))
 
 def uniform(*shape, min=-1.0, max=1.0):
     shape = jax.core.canonicalize_shape(shape)
     return core.Param(lambda key: jax.random.uniform(key, shape, minval=min, maxval=max))
+
+def kaiming_uniform(*shape, a=0):
+    fan_in = np.prod(shape[1:])
+    gain = math.sqrt(2.0 / (1 + a ** 2))
+    bound = gain * math.sqrt(3.0 / fan_in)
+    return uniform(*shape, min=-bound, max=bound)

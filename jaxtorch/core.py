@@ -4,6 +4,7 @@ import jaxlib
 import numpy as np
 import functools
 import jaxtorch.monkeypatches
+import sys
 
 def _addindent(s_, numSpaces):
     s = s_.split('\n')

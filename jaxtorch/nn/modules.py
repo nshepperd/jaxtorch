@@ -106,6 +106,17 @@ class Dropout(Module):
         mask = cx.random.bernoulli(1.0 - self.rate, shape=x.shape)
         return x * mask / (1.0 - self.rate)
 
+class Dropout2d(Module):
+    def __init__(self, p=0.5):
+        self.rate = p
+
+    def forward(self, cx, x):
+        if cx.mode == 'eval':
+            return x
+        drop_shape = x.shape[:2] + (1,) * len(x.shape[2:])
+        mask = cx.random.bernoulli(1.0 - self.rate, shape=drop_shape)
+        return x * mask / (1.0 - self.rate)
+
 class GELU(Module):
     def forward(self, cx, x):
         return jax.nn.gelu(x)

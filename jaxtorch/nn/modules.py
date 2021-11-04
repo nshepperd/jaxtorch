@@ -125,6 +125,14 @@ class ReLU(Module):
     def forward(self, cx, x):
         return jax.nn.relu(x)
 
+class LeakyReLU(Module):
+    def __init__(self, negative_slope=0.01):
+        self.negative_slope = negative_slope
+
+    def forward(self, cx, x):
+        return jax.nn.leaky_relu(x, self.negative_slope)
+
+
 class LayerNorm(Module):
     def __init__(self, *normalized_shape):
         self.normalized_shape = normalized_shape

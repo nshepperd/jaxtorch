@@ -36,4 +36,6 @@ register(
     unsqueeze = lambda arr, axis=0: jnp.expand_dims(arr, axis),
     rearrange = rearrange,
     broadcast_to = jnp.broadcast_to,
+    isfinite = jnp.isfinite,
+    isnan = jnp.isnan,
 )

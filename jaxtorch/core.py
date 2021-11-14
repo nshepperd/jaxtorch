@@ -119,13 +119,14 @@ random number generation that use the Context's stateful PRNG.
     uniform = _wrap(jax.random.uniform)
     weibull_min = _wrap(jax.random.weibull_min)
 
+@jax.tree_util.register_pytree_node_class
 class Context(object):
     """Wraps a ParamState and a PRNG."""
-    def __init__(self, px, key):
+    def __init__(self, px, key, mode='train'):
         self.px = px
         self.rng = PRNG(key)
         self.random = ContextRandom(self.rng)
-        self.mode = 'train'
+        self.mode = mode
 
     def train_mode_(self):
         self.mode = 'train'
@@ -143,6 +144,16 @@ class Context(object):
 
     def __setitem__(self, par, tensor):
         self.px[par] = tensor
+
+    def tree_flatten(self):
+        return (self.px, self.rng.split()), (self.mode,)
+
+    @staticmethod
+    def tree_unflatten(aux, values):
+        (px, key) = values
+        (mode,) = aux
+        return Context(px, key, mode=mode)
+
 
 class Module(object):
     def __call__(self, cx: Context, *args, **kwargs):

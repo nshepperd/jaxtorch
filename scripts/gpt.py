@@ -3,8 +3,9 @@ import jax.numpy as jnp
 import random
 from tqdm import tqdm
 
-from jaxtorch import Module, PRNG, Context, ParamState
+from jaxtorch import Module, PRNG, Context
 from jaxtorch import nn
+from einops import rearrange
 
 class GPTConfig:
     """ base GPT config, params common to all GPT versions """
@@ -23,16 +24,6 @@ class GPT1Config(GPTConfig):
     n_layer = 12
     n_head = 12
     n_embd = 768
-
-def eintr(tensor, format):
-    [left, right] = format.split('->')
-    left = left.strip()
-    right = right.strip()
-    assert set(left) == set(right), 'Must have same indices on left and right'
-    assert len(set(left)) == len(left), 'Repeating indices is not allowed in eintr'
-    index_map = dict([(a, i) for (i, a) in enumerate(left)])
-    indices = tuple(index_map[a] for a in right)
-    return tensor.transpose(indices)
 
 class CausalSelfAttention(Module):
     def __init__(self, config):
@@ -56,18 +47,17 @@ class CausalSelfAttention(Module):
         B, T, C = x.shape
 
         # calculate query, key, values for all heads in batch and move head forward to be the batch dim
-        k = eintr(self.key(cx, x).reshape(B, T, self.n_head, C // self.n_head), 'bthc -> bhtc')
-        q = eintr(self.query(cx, x).reshape(B, T, self.n_head, C // self.n_head), 'bthc -> bhtc')
-        v = eintr(self.value(cx, x).reshape(B, T, self.n_head, C // self.n_head), 'bthc -> bhtc')
+        k = self.key(cx, x).rearrange('b t (h c) -> b h t c', h=self.n_head)
+        q = self.query(cx, x).rearrange('b t (h c) -> b h t c', h=self.n_head)
+        v = self.value(cx, x).rearrange('b t (h c) -> b h t c', h=self.n_head)
 
-       # causal self-attention; Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)
         scale = 1.0 / jnp.sqrt(C // self.n_head)
-        att = (q @ eintr(k, 'bhtc->bhct')) * scale
+        att = (q @ k.rearrange('b h t c -> b h c t')) * scale # b h t t
         att = jnp.where(self.mask[None,None,:T,:T]==1, att, float('-inf'))
         att = jax.nn.softmax(att, axis=-1)
         att = self.attn_drop(cx, att)
         y = att @ v # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
-        y = eintr(y, 'bhtc->bthc').reshape((B, T, C))
+        y = y.rearrange('b h t c -> b t h c').reshape((B, T, C))
 
         # output projection
         y = self.resid_drop(cx, self.proj(cx, y))
@@ -79,15 +69,14 @@ class CausalSelfAttention(Module):
 
         HS = C // self.n_head
         # calculate query, key, values for all heads in batch and move head forward to be the batch dim
-        k2 = eintr(self.key(cx, x).reshape(B, T2, self.n_head, HS), 'bthc -> bhtc')
-        q = eintr(self.query(cx, x).reshape(B, T2, self.n_head, HS), 'bthc -> bhtc')
-        v2 = eintr(self.value(cx, x).reshape(B, T2, self.n_head, HS), 'bthc -> bhtc')
+        k2 = self.key(cx, x).rearrange('b t (h c) -> b h t c', h=self.n_head)
+        q = self.query(cx, x).rearrange('b t (h c) -> b h t c', h=self.n_head)
+        v2 = self.value(cx, x).rearrange('b t (h c) -> b h t c', h=self.n_head)
 
-        # causal self-attention; Self-attend: (B, nh, T2, hs) x (B, nh, hs, T2) -> (B, nh, T2, T2)
         scale = 1.0 / jnp.sqrt(HS)
-        att2 = (q @ eintr(k2, 'bhtc->bhct')) * scale # (B, nh, T2, T2)
+        att2 = (q @ k2.rearrange('b h t c -> b h c t')) * scale # (B, nh, T2, T2)
         att2 = jnp.where(self.mask[None,None,:T2,:T2]==1, att2, float('-inf'))
-        att1 = (q @ eintr(k1, 'bhtc->bhct')) * scale # (B, nh, T2, T1)
+        att1 = (q @ k1.rearrange('b h t c -> b h c t')) * scale # (B, nh, T2, T1)
         att = jnp.concatenate([att1, att2], axis=-1) # (B, nh, T2, T)
         att = jax.nn.softmax(att, axis=-1)
         att = self.attn_drop(cx, att)
@@ -96,7 +85,7 @@ class CausalSelfAttention(Module):
         y1 = att1 @ v1 # (B, nh, T2, hs)
         y2 = att2 @ v2 # (B, nh, T2, hs)
         y = y1 + y2
-        y = eintr(y, 'bhtc->bthc').reshape(B, T2, C)
+        y = y.rearrange('b h t c -> b t h c').reshape(B, T2, C)
 
         # output projection
         y = self.resid_drop(cx, self.proj(cx, y))
@@ -199,7 +188,7 @@ class GPTLM(nn.Module):
         super().self_init_weights(cx)
         for module in self.gen_postorder_modules():
             if isinstance(module, (nn.Linear, nn.Embedding)):
-                cx[module.weight] = 0.02 * cx.random.normal(cx[module.weight].shape)
+                cx[module.weight] = 0.02 * cx.random.normal(module.weight.shape)
             if isinstance(module, nn.Linear) and module.bias is not None:
                 cx[module.bias] = jnp.zeros_like(cx[module.bias])
 

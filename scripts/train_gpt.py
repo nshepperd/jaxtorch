@@ -2,7 +2,7 @@ import jax
 import jax.numpy as jnp
 import random
 
-from jaxtorch import Module, PRNG, Context, ParamState
+from jaxtorch import Module, PRNG, Context
 from jaxtorch import nn
 from jaxtorch import cbor
 
@@ -18,6 +18,9 @@ class SGD(object):
             new_values[p] = px[p] - grad[p] * lr
         return new_values
 
+def sgd(params, grad, lr):
+    return jax.tree_util.tree_map(lambda p, g: p - g * lr, params, grad)
+
 def main():
     rng = PRNG(jax.random.PRNGKey(0))
     mconf = gpt.GPT1Config(256, 64,
@@ -26,7 +29,6 @@ def main():
                            n_embd = 256)
     model = gpt.GPTLM(mconf)
     px = model.init_weights(rng.split())
-    opt = SGD(model.parameters())
     with open('gpt.py', 'rb') as fp:
         data = fp.read()
 
@@ -40,7 +42,7 @@ def main():
         i = random.randint(0, len(data)-64)
         seq = jnp.array([list(data[i:i+64])])
         (v_loss, v_grad) = f_grad(px, seq, rng.split())
-        px = opt.step(px, v_grad, 0.001)
+        px = sgd(px, v_grad, 0.001)
         print(counter, v_loss)
 
         if counter % 100 == 0:

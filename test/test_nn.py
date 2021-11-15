@@ -5,7 +5,7 @@ import numpy as np
 import jax
 import jax.numpy as jnp
 import jaxtorch
-from jaxtorch.core import Module, Context, ParamState, PRNG
+from jaxtorch.core import Module, Context, PRNG
 
 torch.backends.cudnn.deterministic = True
 
@@ -99,8 +99,8 @@ def test_groupnorm():
 
     px = new.init_weights(rng.split())
 
-    old.weight.data.copy_(totorch(px[new.weight]))
-    old.bias.data.copy_(totorch(px[new.bias]))
+    old.weight.data.copy_(totorch(px[new.weight.name]))
+    old.bias.data.copy_(totorch(px[new.bias.name]))
 
     x = jax.random.normal(key=rng.split(), shape=[2, 32, 2])
     x_torch = totorch(x)

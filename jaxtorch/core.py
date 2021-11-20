@@ -215,7 +215,7 @@ class Module(object):
                     continue
 
             if px[p.name].shape != state[k].shape:
-                msg = f'Not loading parameter from incompatible shape: {k} ({px[p].shape} vs {state[k].shape})'
+                msg = f'Not loading parameter from incompatible shape: {k} ({px[p.name].shape} vs {state[k].shape})'
                 if strict:
                     raise ValueError(msg)
                 else:

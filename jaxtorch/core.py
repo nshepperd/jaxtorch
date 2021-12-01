@@ -197,6 +197,9 @@ class Module(object):
     def named_parameters(self):
         return list(self.gen_named_parameters())
 
+    def modules(self):
+        return [m for (k, m) in self.gen_named_modules()]
+
     def parameters(self):
         return [p for (k, p) in self.gen_named_parameters()]
 

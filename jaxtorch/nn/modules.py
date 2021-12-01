@@ -236,3 +236,15 @@ class GroupNorm(Module):
             bias = cx[self.bias].reshape(broadcast_shape)
             y = y * weight + bias
         return y
+
+class PixelUnshuffle(Module):
+    def __init__(self, downscale_factor):
+        self.downscale_factor = downscale_factor
+    def forward(self, cx, x):
+        return x.rearrange('... c (h r) (w s) -> ... (c r s) h w', r = self.downscale_factor, s = self.downscale_factor)
+
+class PixelShuffle(Module):
+    def __init__(self, upscale_factor):
+        self.upscale_factor = upscale_factor
+    def forward(self, cx, x):
+        return x.rearrange('... (c r s) h w -> ... c (h r) (w s)', r = self.upscale_factor, s = self.upscale_factor)

@@ -49,32 +49,15 @@ rng = jaxtorch.PRNG(jax.random.PRNGKey(0))
 # collects all params from submodules.
 params = model.init_weights(rng.split())
 
-# Parameters are stored in a jaxtorch.ParamState object
-assert type(params) is jaxtorch.ParamState
+# Parameters are stored in a dictionary by name
+assert type(params) is dict
 
-# ParamState is just a dictionary indexing weights by their Param
-# identifier. It is a valid pytree and can be differentiated.
-assert type(params[model.layer.weight]) is jaxlib.xla_extension.DeviceArray
-print(params[model.layer.weight])
-# [[ 0.4625378   0.59526694 -0.3165015 ]
-#  [ 0.17670134  0.8430584  -0.14678049]
-#  [-0.29896697  0.5365826  -0.93163735]]
+print(params.keys())
+# dict_keys(['layer.weight', 'layer.bias'])
 
-# Use model.state_dict(params) to convert params to a plain python
-# dictionary of weights by name, suitable for serializing to disk.
-for (key, value) in model.state_dict(params).items():
-    print(key, ':')
-    print(value)
-# layer.weight :
-# [[-0.22408472 -0.0259067  -1.1793687 ]
-#  [ 0.04579717 -0.02665656  0.45956933]
-#  [-0.8320761  -0.977453   -0.21575125]]
-# layer.bias :
-# [0. 0. 0.]
-
-# Can save this state dict in pytorch format.
-jaxtorch.pt.save(model.state_dict(params), '/tmp/state_dict.pt')
-model.load_state_dict(params, jaxtorch.pt.load('/tmp/state_dict.pt'))
+# The parameters dict can be saved as a pytorch compatible file
+jaxtorch.pt.save(params, '/tmp/state_dict.pt')
+params = model.load_state_dict(params, jaxtorch.pt.load('/tmp/state_dict.pt'))
 
 def loss(params, key):
     # Context wraps params and a PRNG key.

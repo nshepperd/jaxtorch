@@ -39,14 +39,13 @@ class Linear(jaxtorch.Module):
 model = Linear(3, 3)
 
 # You initialize the weights by passing a RNG key.
+# Calling init_weights also names all the parameters in the Module tree.
 params = model.init_weights(jax.random.PRNGKey(0))
 
-# Parameters are stored in a jaxtorch.ParamState object
-assert type(params) is jaxtorch.ParamState
-
-# ParamState is just a dictionary indexing weights by their Param
-# identifier. It is a valid pytree and can be differentiated.
-assert type(params[model.weight]) is jaxlib.xla_extension.DeviceArray
+# Parameters are stored in a dictionary by name.
+assert type(params) is dict
+assert type(params[model.weight.name]) is jaxlib.xla_extension.DeviceArray
+assert model.weight.name == 'weight'
 
 def loss(params, key):
     cx = jaxtorch.Context(params, key)

@@ -108,6 +108,9 @@ class Context(object):
         else:
             raise TypeError('Expected a Param for indexing into Context')
 
+    # TODO: having this might be a bad idea if it breaks future
+    # features, might need a dedicated wrapper for transforming cx
+    # functions.
     def tree_flatten(self):
         return (self.px, self.rng.split()), (self.mode,)
 
@@ -207,8 +210,7 @@ class Module(object):
         return dict(px)
 
     def load_state_dict(self, px, state, strict=True):
-        """Load a previously saved state_dict into px. Returns a new copy of px."""
-        px = dict(px)
+        """Load a previously saved state_dict into px. Returns px."""
         for (k, p) in self.gen_named_parameters():
             if k not in state:
                 if strict:

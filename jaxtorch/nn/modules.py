@@ -118,6 +118,10 @@ class Dropout2d(Module):
         mask = cx.random.bernoulli(1.0 - self.rate, shape=drop_shape)
         return x * mask / (1.0 - self.rate)
 
+class Sigmoid(Module):
+    def forward(self, cx, x):
+        return jax.nn.sigmoid(x)
+
 class GELU(Module):
     def forward(self, cx, x):
         return jax.nn.gelu(x)

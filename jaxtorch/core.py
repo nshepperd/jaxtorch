@@ -207,7 +207,7 @@ class Module(object):
         return [p for (k, p) in self.gen_named_parameters()]
 
     def state_dict(self, px):
-        return dict(px)
+        return {name:px[par.name] for (name, par) in self.gen_named_parameters()}
 
     def load_state_dict(self, px, state, strict=True):
         """Load a previously saved state_dict into px. Returns px."""

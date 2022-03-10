@@ -137,7 +137,7 @@ def upsample2x_base(
     if norm:
         # normalization for parts that touch the zero-padding
         norm = jax.lax.conv_general_dilated(
-            jnp.ones(img.shape[-3:], dtype=img.dtype),
+            jnp.ones([1, *img.shape[-3:]], dtype=img.dtype),
             kern,
             window_strides=[1, 1],
             padding=[(ksize // 2, ksize // 2), (ksize // 2, ksize // 2)],
@@ -171,7 +171,7 @@ def downsample2x_base(
     if norm:
         # normalization for parts that touch the zero-padding
         norm = jax.lax.conv_general_dilated(
-            jnp.ones(x.shape[-3:], dtype=x.dtype),
+            jnp.ones([1, *x.shape[-3:]], dtype=x.dtype),
             kern,
             window_strides=[2, 2],
             padding=[

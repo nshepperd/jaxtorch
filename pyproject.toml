@@ -1,0 +1,16 @@
+[tool.poetry]
+name = "jaxtorch"
+version = "0.1.0"
+description = "PyTorch-style interface for JAX"
+authors = ["nshepperd <nshepperd@gmail.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.7"
+einops = "^0.3.0"
+cbor2 = "^5.4.1"
+
+[tool.poetry.dev-dependencies]
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"

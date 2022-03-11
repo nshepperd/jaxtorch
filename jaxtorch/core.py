@@ -5,6 +5,8 @@ import numpy as np
 import functools
 import jaxtorch.monkeypatches
 import sys
+import jmp
+
 
 def _addindent(s_, numSpaces):
     s = s_.split('\n')
@@ -39,9 +41,9 @@ class PRNG(object):
         return subkey
 
 class ContextRandom(object):
-    """Lives inside a Context and provides convenience functions for
-random number generation that use the Context's stateful PRNG.
-
+    """
+    Lives inside a Context and provides convenience functions for
+    random number generation that use the Context's stateful PRNG.
     """
     def __init__(self, rng):
         self.rng = rng
@@ -78,11 +80,22 @@ random number generation that use the Context's stateful PRNG.
 @jax.tree_util.register_pytree_node_class
 class Context(object):
     """Wraps a parameter dictionary and a PRNG."""
-    def __init__(self, px, key, mode='train'):
+    def __init__(self, px, key, mode='train', policy=jmp.get_policy("float32")):
         self.px = px
         self.rng = PRNG(key)
         self.random = ContextRandom(self.rng)
         self.mode = mode
+        self.policy = policy
+        self.pstack = []
+
+    def push_policy(self, p):
+        self.pstack.append(self.policy)
+        self.policy = p
+
+    def pop_policy(self):
+        p = self.policy
+        self.policy = self.pstack.pop()
+        return p
 
     def train_mode_(self):
         self.mode = 'train'
@@ -94,13 +107,14 @@ class Context(object):
 
     def __getitem__(self, par):
         if isinstance(par, Param):
-            return self.px[par.name]
+            return self.policy.cast_to_compute(self.px[par.name])
         elif isinstance(par, str):
-            return self.px[par]
+            return self.policy.cast_to_compute(self.px[par])
         else:
             raise TypeError('Expected a Param for indexing into Context')
 
     def __setitem__(self, par, value):
+        value = self.policy.cast_to_param(value)
         if isinstance(par, Param):
             self.px[par.name] = value
         elif isinstance(par, str):
@@ -123,7 +137,10 @@ class Context(object):
 
 class Module(object):
     def __call__(self, cx: Context, *args, **kwargs):
-        return self.forward(cx, *args, **kwargs)
+        args, kwargs = cx.policy.cast_to_compute((args, kwargs))
+        out = self.forward(cx, *args, **kwargs)
+        # out = self.policy.cast_to_output(out)
+        return out
 
     def forward(self, cx: Context, *args, **kwargs):
         """Implements the forward pass. Must take Context as the first argument."""
@@ -132,7 +149,6 @@ class Module(object):
     def self_named_modules(self):
         """Yields a sequence of (str, Module) for direct children of this
            module. May be overridden.
-
         """
         for (name, val) in self.__dict__.items():
             if isinstance(val, Module):

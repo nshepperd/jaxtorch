@@ -15,9 +15,9 @@ def ones(*shape):
     return core.Param(shape, lambda key: jnp.ones(shape))
 
 
-def normal(*shape, stddev=1.0):
+def normal(*shape, mean=0.0, stddev=1.0):
     shape = jax.core.canonicalize_shape(shape)
-    return core.Param(shape, lambda key: stddev * jax.random.normal(key, shape))
+    return core.Param(shape, lambda key: mean + stddev * jax.random.normal(key, shape))
 
 
 def const(tensor):
@@ -54,3 +54,43 @@ def kaiming_uniform(*shape, a=0, scale=1.0):
     gain = math.sqrt(2.0 / (1 + a**2))
     bound = scale * gain * math.sqrt(3.0 / fan_in)
     return uniform(*shape, min=-bound, max=bound)
+
+
+def mup_input_init(*shape, mean=0.0, std=1.0):
+    shape = jax.core.canonicalize_shape(shape)
+    fan_in = np.prod(shape[1:])
+    stddev = std / fan_in
+    return normal(*shape, mean=mean, stddev=stddev)
+
+
+def mup_output_init(*shape, mean=0.0, std=1.0):
+    shape = jax.core.canonicalize_shape(shape)
+    fan_in = np.prod(shape[1:])
+    stddev = std / fan_in**2
+    return normal(*shape, mean=mean, stddev=stddev)
+
+
+def mup_hidden_init(*shape, mean=0.0, std=1.0):
+    shape = jax.core.canonicalize_shape(shape)
+    fan_in = np.prod(shape[1:])
+    stddev = std / fan_in
+    return normal(*shape, mean=mean, stddev=stddev)
+
+
+def sum_init(*inits):
+    def init(*shape):
+        ps = [i(*shape).initializer for i in inits]
+
+        def _init(key):
+            ks = jax.random.split(key, len(ps))
+            vs = [p(k) for p, k in zip(ps, ks)]
+            return sum(vs)
+
+        return core.Param(shape, _init)
+
+    return init
+
+
+def scale_init(scale, init, *shape):
+    base = init(*shape).initializer
+    return core.Param(shape, lambda key: scale * base(key))

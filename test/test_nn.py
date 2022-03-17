@@ -105,7 +105,7 @@ def test_groupnorm():
     x = jax.random.normal(key=rng.split(), shape=[2, 32, 2])
     x_torch = totorch(x)
 
-    cx = Context(px, rng.split())
+    cx = Context(px=px, key=rng.split())
     new_result = new(cx, x)
     old_result = old(x_torch)
     check(old_result, new_result)
@@ -118,7 +118,7 @@ def test_dropout():
     px = module.init_weights(rng.split())
 
     x = jax.random.normal(key=rng.split(), shape=[1, 32])
-    cx = Context(px, rng.split())
+    cx = Context(px=px, key=rng.split())
 
     out_train = module(cx.train_mode_(), x)
     assert (out_train != 0).sum() < 20

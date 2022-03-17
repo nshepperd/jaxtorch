@@ -48,7 +48,7 @@ assert type(params[model.weight.name]) is jaxlib.xla_extension.DeviceArray
 assert model.weight.name == 'weight'
 
 def loss(params, key):
-    cx = jaxtorch.Context(params, key)
+    cx = jaxtorch.Context(px=params, key=key)
     x = jnp.array([1.0,2.0,3.0])
     y = jnp.array([4.0,5.0,6.0])
     return jnp.mean((model(cx, x) - y)**2)

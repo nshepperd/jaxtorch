@@ -33,7 +33,7 @@ def main():
         data = fp.read()
 
     def loss(px, seq, key):
-        cx = Context(px, key)
+        cx = Context(px=px, key=key)
         return model.loss(cx, seq)
     f_grad = jax.jit(jax.value_and_grad(loss))
 
@@ -47,7 +47,7 @@ def main():
 
         if counter % 100 == 0:
             idx = jnp.array([[-1] * 64])
-            idx = model.generate(Context(px, rng.split()), idx)
+            idx = model.generate(Context(px=px, key=rng.split()), idx)
             print(bytes(idx.squeeze().tolist()).decode('utf-8', errors='replace'))
 
         counter += 1

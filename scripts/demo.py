@@ -61,7 +61,7 @@ params = model.load_state_dict(params, jaxtorch.pt.load('/tmp/state_dict.pt'))
 
 def loss(params, key):
     # Context wraps params and a PRNG key.
-    cx = jaxtorch.Context(params, key)
+    cx = jaxtorch.Context(px=params, key=key)
     x = jnp.array([1.0,2.0,3.0])
     y = jnp.array([4.0,5.0,6.0])
     return jnp.mean((model(cx, x) - y)**2)

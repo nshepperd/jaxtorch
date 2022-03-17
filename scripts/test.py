@@ -9,13 +9,13 @@ from jaxtorch import cbor
 import gpt
 
 def test_layernorm():
-    cx = Context(ParamState(), jax.random.PRNGKey(0))
+    cx = Context(px=ParamState(), key=jax.random.PRNGKey(0))
     ln = nn.LayerNorm(cx, 5)
     x = jax.random.normal(shape=[2, 5], key=jax.random.PRNGKey(1))
     print(ln(cx, x))
 
 def test_gpt():
-    cx = Context(ParamState(), jax.random.PRNGKey(0))
+    cx = Context(px=ParamState(), key=jax.random.PRNGKey(0))
     mconf = gpt.GPT1Config(10, 10)
     model = gpt.GPTLM(cx, mconf)
     # with open('mod.cbor', 'wb') as fp:

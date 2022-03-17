@@ -52,7 +52,7 @@ px.initialize(rng.split())
 print(model.state_dict(px))
 
 def loss(px, x, y, key):
-    cx = Context(px, key)
+    cx = Context(px=px, key=key)
     return square(model(cx, x) - y).mean()
 loss_grad = jax.jit(jax.value_and_grad(loss))
 

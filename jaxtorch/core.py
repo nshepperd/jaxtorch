@@ -143,7 +143,7 @@ class Context(object):
     def tree_unflatten(aux, values):
         (px, key) = values
         (mode,) = aux
-        return Context(px, key, mode=mode)
+        return Context(px=px, key=key, mode=mode)
 
 
 class Module(object):

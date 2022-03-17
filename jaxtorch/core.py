@@ -1,3 +1,5 @@
+from abc import abstractmethod
+from typing import Callable, Any
 import jax
 import jax.numpy as jnp
 import jaxlib
@@ -9,18 +11,20 @@ import jmp
 
 
 def _addindent(s_, numSpaces):
-    s = s_.split('\n')
+    s = s_.split("\n")
     # don't do anything for single-line stuff
     if len(s) == 1:
         return s_
     first = s.pop(0)
-    s = [(numSpaces * ' ') + line for line in s]
-    s = '\n'.join(s)
-    s = first + '\n' + s
+    s = [(numSpaces * " ") + line for line in s]
+    s = "\n".join(s)
+    s = first + "\n" + s
     return s
+
 
 class Param(object):
     """Represents a parameter of a Module, and specifies its shape and initialization."""
+
     def __init__(self, shape, initializer):
         self.shape = shape
         self.initializer = initializer
@@ -28,23 +32,28 @@ class Param(object):
 
     def __repr__(self):
         if self.name is not None:
-            return f'<Param at {self.name}>'
+            return f"<Param at {self.name}>"
         else:
             return super().__repr__()
 
+
 class PRNG(object):
     """Just a stateful wrapper for a jax.random.PRNGKey."""
+
     def __init__(self, key):
         self.key = key
+
     def split(self):
         (self.key, subkey) = jax.random.split(self.key)
         return subkey
+
 
 class ContextRandom(object):
     """
     Lives inside a Context and provides convenience functions for
     random number generation that use the Context's stateful PRNG.
     """
+
     def __init__(self, rng):
         self.rng = rng
 
@@ -77,10 +86,12 @@ class ContextRandom(object):
     uniform = _wrap(jax.random.uniform)
     weibull_min = _wrap(jax.random.weibull_min)
 
+
 @jax.tree_util.register_pytree_node_class
 class Context(object):
     """Wraps a parameter dictionary and a PRNG."""
-    def __init__(self, px, key, mode='train', policy=jmp.get_policy("float32")):
+
+    def __init__(self, *, px, key, mode="train", policy=jmp.get_policy("float32")):
         self.px = px
         self.rng = PRNG(key)
         self.random = ContextRandom(self.rng)
@@ -98,11 +109,11 @@ class Context(object):
         return p
 
     def train_mode_(self):
-        self.mode = 'train'
+        self.mode = "train"
         return self
 
     def eval_mode_(self):
-        self.mode = 'eval'
+        self.mode = "eval"
         return self
 
     def __getitem__(self, par):
@@ -111,7 +122,7 @@ class Context(object):
         elif isinstance(par, str):
             return self.policy.cast_to_compute(self.px[par])
         else:
-            raise TypeError('Expected a Param for indexing into Context')
+            raise TypeError("Expected a Param for indexing into Context")
 
     def __setitem__(self, par, value):
         value = self.policy.cast_to_param(value)
@@ -120,7 +131,7 @@ class Context(object):
         elif isinstance(par, str):
             self.px[par] = value
         else:
-            raise TypeError('Expected a Param for indexing into Context')
+            raise TypeError("Expected a Param for indexing into Context")
 
     # TODO: having this might be a bad idea if it breaks future
     # features, might need a dedicated wrapper for transforming cx
@@ -142,13 +153,14 @@ class Module(object):
         # out = self.policy.cast_to_output(out)
         return out
 
-    def forward(self, cx: Context, *args, **kwargs):
-        """Implements the forward pass. Must take Context as the first argument."""
-        raise NotImplementedError
+    # @abstractmethod
+    # def forward(self, cx: Context, *args, **kwargs):  # type: ignore
+    #     """Implements the forward pass. Must take Context as the first argument."""
+    #     raise NotImplementedError
 
     def self_named_modules(self):
         """Yields a sequence of (str, Module) for direct children of this
-           module. May be overridden.
+        module. May be overridden.
         """
         for (name, val) in self.__dict__.items():
             if isinstance(val, Module):
@@ -156,7 +168,7 @@ class Module(object):
 
     def self_named_parameters(self):
         """Yields a sequence of (str, Param) for direct children of this
-           module. May be overridden.
+        module. May be overridden.
 
         """
         for (name, val) in self.__dict__.items():
@@ -165,8 +177,8 @@ class Module(object):
 
     def self_init_weights(self, cx):
         """Initializes weights for this network's parameters. May be overriden
-           for custom initialization. Child modules are initialized
-           before parents.
+        for custom initialization. Child modules are initialized
+        before parents.
 
         """
         for (name, par) in self.self_named_parameters():
@@ -175,11 +187,11 @@ class Module(object):
 
     def init_weights(self, key):
         """Attaches names to parameters and returns initialized dict of
-           parameters by name.
+        parameters by name.
 
         """
         self.labeled_parameters_()
-        cx = Context({}, key)
+        cx = Context(px={}, key=key)
         for module in self.gen_postorder_modules():
             module.self_init_weights(cx)
         self.self_init_weights(cx)
@@ -195,7 +207,7 @@ class Module(object):
         for (name, val) in self.self_named_modules():
             yield (name, val)
             for (k, v) in val.gen_named_modules():
-                yield (name+'.'+k, v)
+                yield (name + "." + k, v)
 
     def gen_postorder_modules(self):
         "Yields Module for all descendants of this module (postorder traversal)."
@@ -211,7 +223,7 @@ class Module(object):
 
         for (name, mod) in self.self_named_modules():
             for (k, v) in mod.gen_named_parameters():
-                yield (name+'.'+k, v)
+                yield (name + "." + k, v)
 
     def named_parameters(self):
         return list(self.gen_named_parameters())
@@ -223,20 +235,20 @@ class Module(object):
         return [p for (k, p) in self.gen_named_parameters()]
 
     def state_dict(self, px):
-        return {name:px[par.name] for (name, par) in self.gen_named_parameters()}
+        return {name: px[par.name] for (name, par) in self.gen_named_parameters()}
 
     def load_state_dict(self, px, state, strict=True):
         """Load a previously saved state_dict into px. Returns px."""
         for (k, p) in self.gen_named_parameters():
             if k not in state:
                 if strict:
-                    raise ValueError(f'Not loading missing parameter: {k}')
+                    raise ValueError(f"Not loading missing parameter: {k}")
                 else:
-                    print(f'Not loading missing parameter: {k}', file=sys.stderr)
+                    print(f"Not loading missing parameter: {k}", file=sys.stderr)
                     continue
 
             if px[p.name].shape != state[k].shape:
-                msg = f'Not loading parameter from incompatible shape: {k} ({px[p.name].shape} vs {state[k].shape})'
+                msg = f"Not loading parameter from incompatible shape: {k} ({px[p.name].shape} vs {state[k].shape})"
                 if strict:
                     raise ValueError(msg)
                 else:
@@ -256,7 +268,7 @@ class Module(object):
         this method in your own modules. Both single-line and multi-line
         strings are acceptable.
         """
-        return ''
+        return ""
 
     def __repr__(self):
         # We treat the extra repr like the sub-module, one item per line
@@ -264,22 +276,22 @@ class Module(object):
         extra_repr = self.extra_repr()
         # empty string will be split into list ['']
         if extra_repr:
-            extra_lines = extra_repr.split('\n')
+            extra_lines = extra_repr.split("\n")
         child_lines = []
         for key, module in self.__dict__.items():
             if isinstance(module, Module):
                 mod_str = repr(module)
                 mod_str = _addindent(mod_str, 2)
-                child_lines.append('(' + key + '): ' + mod_str)
+                child_lines.append("(" + key + "): " + mod_str)
         lines = extra_lines + child_lines
 
-        main_str = self._get_name() + '('
+        main_str = self._get_name() + "("
         if lines:
             # simple one-liner info, which most builtin Modules will use
             if len(extra_lines) == 1 and not child_lines:
                 main_str += extra_lines[0]
             else:
-                main_str += '\n  ' + '\n  '.join(lines) + '\n'
+                main_str += "\n  " + "\n  ".join(lines) + "\n"
 
-        main_str += ')'
+        main_str += ")"
         return main_str

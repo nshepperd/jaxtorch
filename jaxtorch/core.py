@@ -10,6 +10,25 @@ import sys
 import jmp
 
 
+def wrap_policy_cast(method, cast_output=True):
+    def wrapped(self, cx, *args, **kwargs):
+        if hasattr(self, "policy"):
+            cx.push_policy(self.policy)
+
+        args = cx.policy.cast_to_compute(args)
+        kwargs = cx.policy.cast_to_compute(kwargs)
+        out = method(self, cx, *args, **kwargs)
+
+        if cast_output:
+            out = cx.policy.cast_to_output(out)
+
+        if hasattr(self, "policy"):
+            cx.pop_policy()
+
+        return out
+    return wrapped
+
+
 def _addindent(s_, numSpaces):
     s = s_.split("\n")
     # don't do anything for single-line stuff
@@ -147,10 +166,9 @@ class Context(object):
 
 
 class Module(object):
+    @wrap_policy_cast
     def __call__(self, cx: Context, *args, **kwargs):
-        args, kwargs = cx.policy.cast_to_compute((args, kwargs))
         out = self.forward(cx, *args, **kwargs)
-        # out = self.policy.cast_to_output(out)
         return out
 
     # @abstractmethod

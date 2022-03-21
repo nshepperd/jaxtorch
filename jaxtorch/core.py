@@ -10,7 +10,17 @@ import sys
 import jmp
 
 
-def wrap_policy_cast(method, cast_output=True):
+def fn_wrap_policy_cast(f, cast_output=True):
+    def wrapped(cx, *args, **kwargs):
+        args = cx.policy.cast_to_compute(args)
+        kwargs = cx.policy.cast_to_compute(kwargs)
+        out = f(cx, *args, **kwargs)
+        if cast_output:
+            out = cx.policy.cast_to_output(out)
+        return out
+    return wrapped
+
+def method_wrap_policy_cast(method, cast_output=True):
     def wrapped(self, cx, *args, **kwargs):
         if hasattr(self, "policy"):
             cx.push_policy(self.policy)
@@ -76,7 +86,7 @@ class ContextRandom(object):
     def __init__(self, rng):
         self.rng = rng
 
-    def _wrap(f):
+    def _wrap(f: Callable) -> Callable: # type: ignore
         return lambda self, *args, **kwargs: f(self.rng.split(), *args, **kwargs)
 
     bernoulli = _wrap(jax.random.bernoulli)
@@ -166,9 +176,9 @@ class Context(object):
 
 
 class Module(object):
-    @wrap_policy_cast
+    @method_wrap_policy_cast
     def __call__(self, cx: Context, *args, **kwargs):
-        out = self.forward(cx, *args, **kwargs)
+        out = self.forward(cx, *args, **kwargs) # type: ignore
         return out
 
     # @abstractmethod

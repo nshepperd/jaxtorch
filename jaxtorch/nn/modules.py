@@ -180,8 +180,8 @@ class LayerNorm(Module):
             bias = cx[self.bias]
         else:
             bias = 0
-        mu = x.mean(axis=self.axes, keepdims=True)
-        sigma = jnp.sqrt((x - mu).square().mean(axis=self.axes, keepdims=True) + self.eps)
+        mu = jnp.mean(x, axis=self.axes, keepdims=True)
+        sigma = jnp.std(x, axis=self.axes, keepdims=True)
         normed = (x - mu) / sigma
         return weight * normed + bias
 
@@ -347,9 +347,9 @@ class GroupNorm(Module):
         B, C, *rest = x.shape
         assert C == self.num_channels
         x = x.reshape([B, self.num_groups, C//self.num_groups, *rest])
-        mu = x.mean(axis=tuple(range(2,len(x.shape))), keepdims=True)
-        var = x.var(axis=tuple(range(2,len(x.shape))), keepdims=True)
-        y = (x - mu) / jnp.sqrt(var + self.eps)
+        mu = jnp.mean(x, axis=tuple(range(2,len(x.shape))), keepdims=True)
+        std = jnp.std(x, axis=tuple(range(2,len(x.shape))), keepdims=True)
+        y = (x - mu) / std
         y = y.reshape([B, C, *rest])
         if self.affine:
             broadcast_shape = [self.num_channels] + [1] * len(rest)

@@ -1,4 +1,5 @@
 import math
+from typing import Callable, OrderedDict
 import jax
 import jax.numpy as jnp
 import jaxtorch
@@ -10,6 +11,37 @@ from jaxtorch import init
 class Identity(Module):
     def forward(self, cx, x):
         return x
+
+
+class Lambda(Module):
+    def __init__(self, f: Callable, use_cx=False):
+        super().__init__()
+        self.f = f
+        self.use_cx = use_cx
+
+    def forward(self, cx, *args, **kwargs):
+        if self.use_cx:
+            return self.f(cx, *args, **kwargs)
+        else:
+            return self.f(*args, **kwargs)
+
+
+class SequentialDict(Module):
+    def __init__(self, modules: OrderedDict[str, Module]):
+        super().__init__()
+        self.mods = modules
+
+    def self_named_modules(self):
+        for k, m in self.mods.items():
+            yield k, m
+
+    def forward(self, cx, x, *args, **kwargs):
+        for k, m in self.mods.items():
+            x = m(cx, x, *args, **kwargs)
+        return x
+
+    def __getitem__(self, key):
+        return self.mods[key]
 
 
 class ModuleList(Module):
@@ -34,7 +66,10 @@ class ModuleList(Module):
 
     def self_named_modules(self):
         for (i, m) in enumerate(self.modules):
-            yield (f'{i}', m)
+            yield (f"{i}", m)
+    
+    def __getitem__(self, key):
+        return self.modules[key]
 
 
 class Sequential(ModuleList):
@@ -42,6 +77,23 @@ class Sequential(ModuleList):
         for module in self.modules:
             x = module(cx, x, *args, **kwargs)
         return x
+    
+
+
+def ignore_kwargs(mod):
+    class IgnoreKwargs(mod):
+        def forward(self, cx, *args, **kwargs):
+            return super().forward(cx, *args)
+
+    return IgnoreKwargs
+
+
+def ignore_non_kwargs(mod):
+    class IgnoreNonKwargs(mod):
+        def forward(self, cx, *args, **kwargs):
+            return super().forward(cx, **kwargs)
+
+    return IgnoreNonKwargs
 
 
 class Linear(Module):
@@ -78,7 +130,7 @@ class Linear(Module):
         return y
 
     def extra_repr(self) -> str:
-        return 'in_features={}, out_features={}, bias={}'.format(
+        return "in_features={}, out_features={}, bias={}".format(
             self.in_features, self.out_features, self.bias is not None
         )
 
@@ -94,7 +146,7 @@ class Embedding(Module):
         return cx[self.weight][x]
 
     def extra_repr(self) -> str:
-        s = '{num_embeddings}, {embedding_dim}'
+        s = "{num_embeddings}, {embedding_dim}"
         # if self.padding_idx is not None:
         #     s += ', padding_idx={padding_idx}'
         # if self.max_norm is not None:
@@ -108,7 +160,6 @@ class Embedding(Module):
         return s.format(**self.__dict__)
 
 
-
 class Tanh(Module):
     def forward(self, cx, x):
         return jnp.tanh(x)
@@ -119,33 +170,38 @@ class Dropout(Module):
         self.rate = p
 
     def forward(self, cx, x):
-        if cx.mode == 'eval':
+        if cx.mode == "eval":
             return x
         mask = cx.random.bernoulli(1.0 - self.rate, shape=x.shape)
         return x * mask / (1.0 - self.rate)
+
 
 class Dropout2d(Module):
     def __init__(self, p=0.5):
         self.rate = p
 
     def forward(self, cx, x):
-        if cx.mode == 'eval':
+        if cx.mode == "eval":
             return x
         drop_shape = x.shape[:2] + (1,) * len(x.shape[2:])
         mask = cx.random.bernoulli(1.0 - self.rate, shape=drop_shape)
         return x * mask / (1.0 - self.rate)
 
+
 class Sigmoid(Module):
     def forward(self, cx, x):
         return jax.nn.sigmoid(x)
+
 
 class GELU(Module):
     def forward(self, cx, x):
         return jax.nn.gelu(x)
 
+
 class ReLU(Module):
     def forward(self, cx, x):
         return jax.nn.relu(x)
+
 
 class LeakyReLU(Module):
     def __init__(self, negative_slope=0.01):
@@ -168,7 +224,7 @@ class LayerNorm(Module):
         else:
             self.weight = None
             self.bias = None
-        self.axes = tuple(-i for i in range(1, len(normalized_shape)+1))
+        self.axes = tuple(-i for i in range(1, len(normalized_shape) + 1))
 
     def forward(self, cx, x):
         x = cx.policy.cast_to_compute(x)
@@ -315,6 +371,7 @@ class SiLU(Module):
     def forward(self, cx, x):
         return jax.nn.silu(x)
 
+
 class GroupNorm(Module):
     def __init__(
         self,
@@ -346,9 +403,9 @@ class GroupNorm(Module):
     def forward(self, cx, x):
         B, C, *rest = x.shape
         assert C == self.num_channels
-        x = x.reshape([B, self.num_groups, C//self.num_groups, *rest])
-        mu = jnp.mean(x, axis=tuple(range(2,len(x.shape))), keepdims=True)
-        std = jnp.std(x, axis=tuple(range(2,len(x.shape))), keepdims=True)
+        x = x.reshape([B, self.num_groups, C // self.num_groups, *rest])
+        mu = jnp.mean(x, axis=tuple(range(2, len(x.shape))), keepdims=True)
+        std = jnp.std(x, axis=tuple(range(2, len(x.shape))), keepdims=True)
         y = (x - mu) / std
         y = y.reshape([B, C, *rest])
         if self.affine:
@@ -358,14 +415,26 @@ class GroupNorm(Module):
             y = y * weight + bias
         return y
 
+
 class PixelUnshuffle(Module):
     def __init__(self, downscale_factor):
         self.downscale_factor = downscale_factor
+
     def forward(self, cx, x):
-        return x.rearrange('... c (h r) (w s) -> ... (c r s) h w', r = self.downscale_factor, s = self.downscale_factor)
+        return x.rearrange(
+            "... c (h r) (w s) -> ... (c r s) h w",
+            r=self.downscale_factor,
+            s=self.downscale_factor,
+        )
+
 
 class PixelShuffle(Module):
     def __init__(self, upscale_factor):
         self.upscale_factor = upscale_factor
+
     def forward(self, cx, x):
-        return x.rearrange('... (c r s) h w -> ... c (h r) (w s)', r = self.upscale_factor, s = self.upscale_factor)
+        return x.rearrange(
+            "... (c r s) h w -> ... c (h r) (w s)",
+            r=self.upscale_factor,
+            s=self.upscale_factor,
+        )

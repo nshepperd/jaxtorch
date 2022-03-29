@@ -25,12 +25,21 @@ def const(tensor):
     return core.Param(shape, lambda key: tensor)
 
 
-def glorot_normal(*shape, gain=1.0):
+def full(*shape, value=1.0):
+    shape = jax.core.canonicalize_shape(shape)
+    return core.Param(shape, lambda key: jnp.full(shape, value))
+
+
+def glorot_normal_t(key, *shape, gain=1.0):
     shape = jax.core.canonicalize_shape(shape)
     fan_out = shape[0] * np.prod(shape[2:])
     fan_in = shape[1] * np.prod(shape[2:])
     stddev = gain * np.sqrt(2.0 / (fan_in + fan_out))
-    return normal(*shape, stddev=stddev)
+    return stddev * jax.random.normal(key, shape)
+
+
+def glorot_normal(*shape, gain=1.0):
+    return core.Param(shape, lambda key: glorot_normal_t(key, *shape, gain=gain))
 
 
 def glorot_uniform(*shape, gain=1.0):

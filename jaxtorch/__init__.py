@@ -1,4 +1,3 @@
-import jaxtorch.cbor
 import jaxtorch.image
 import jaxtorch.init
 import jaxtorch.nn

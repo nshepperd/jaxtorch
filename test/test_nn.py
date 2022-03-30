@@ -9,7 +9,7 @@ from jaxtorch.core import Module, Context, PRNG
 
 torch.backends.cudnn.deterministic = True
 
-def check(old, new):
+def check(old, new, limit=1e-6):
     old_np = np.array(old)
     new_np = np.array(new)
     assert old_np.shape == new_np.shape
@@ -18,7 +18,7 @@ def check(old, new):
     # Pretty loose bounds due to float32 precision. There seem to be
     # some implementation differences resulting in different error
     # bounds betwen jax and torch.
-    assert difference/magnitude < 1e-6, difference/magnitude
+    assert difference/magnitude < limit, difference/magnitude
 
 def totorch(x):
     return torch.tensor(np.array(x))
@@ -90,6 +90,14 @@ def test_conv2d():
     new_result = jaxtorch.nn.functional.conv2d(x, w, padding='valid', groups=2)
     old_result = torch.nn.functional.conv2d(x_torch, w_torch, padding='valid', groups=2)
     check(old_result, new_result)
+
+@torch.no_grad()
+def test_conv2d_init():
+    rng = PRNG(jax.random.PRNGKey(0))
+    new_mod = jaxtorch.nn.Conv2d(256, 512, 3)
+    new_weights = new_mod.init_weights(rng.split())
+    old_mod = torch.nn.Conv2d(256, 512, 3)
+    check(new_weights['weight'].std(), old_mod.weight.std(), 0.01)
 
 @torch.no_grad()
 def test_groupnorm():

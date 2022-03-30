@@ -12,33 +12,41 @@ class Identity(Module):
 
 
 class ModuleList(Module):
-    def __init__(self, *modules):
-        self.modules = []
-        for item in modules:
+    def __init__(self, *items):
+        self.items = []
+        for item in items:
             if isinstance(item, Module):
-                self.modules.append(item)
+                self.items.append(item)
             elif isinstance(item, (list, tuple)):
-                self.modules.extend(item)
+                self.items.extend(item)
             else:
                 raise ValueError("Expected module or sequence to ModuleList()")
 
     def __iter__(self):
-        return iter(self.modules)
+        return iter(self.items)
+
+    def __getitem__(self, index):
+        if isinstance(index, slice):
+            return type(self)(self.items[index])
+        elif isinstance(index, int):
+            return self.items[index]
+        else:
+            raise TypeError("Invalid argument type.")
 
     def append(self, mod):
-        self.modules.append(mod)
+        self.items.append(mod)
 
     def forward(self, cx, x):
         raise NotImplementedError
 
     def self_named_modules(self):
-        for (i, m) in enumerate(self.modules):
+        for (i, m) in enumerate(self.items):
             yield (f'{i}', m)
 
 
 class Sequential(ModuleList):
     def forward(self, cx, x):
-        for module in self.modules:
+        for module in self:
             x = module(cx, x)
         return x
 

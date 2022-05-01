@@ -211,6 +211,21 @@ test = ["pytest", "pytest-trio", "pytest-asyncio (>=0.17)", "testpath", "trio", 
 trio = ["trio", "async-generator"]
 
 [[package]]
+name = "jmp"
+version = "0.0.2"
+description = "JMP is a Mixed Precision library for JAX."
+category = "main"
+optional = false
+python-versions = "*"
+
+[package.dependencies]
+numpy = ">=1.19.5"
+
+[package.extras]
+jax = ["jax (>=0.1.71)"]
+jaxlib = ["jaxlib (>=0.1.49)"]
+
+[[package]]
 name = "keyring"
 version = "23.5.0"
 description = "Store and access your passwords safely."
@@ -521,7 +536,7 @@ testing = ["pytest (>=6)", "pytest-checkdocs (>=2.4)", "pytest-flake8", "pytest-
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.9,<3.11"
-content-hash = "603b6ce673203c11e7760184741e0779d251d6daa58f60c0ee33b5ac3c4ec563"
+content-hash = "3bb445ceb3f8cd4df3d61276b23f921bf5fda0d93e989b99cc0545cf1e339f0c"
 
 [metadata.files]
 absl-py = [
@@ -667,6 +682,10 @@ jaxlib = [
 jeepney = [
     {file = "jeepney-0.8.0-py3-none-any.whl", hash = "sha256:c0a454ad016ca575060802ee4d590dd912e35c122fa04e70306de3d076cce755"},
     {file = "jeepney-0.8.0.tar.gz", hash = "sha256:5efe48d255973902f6badc3ce55e2aa6c5c3b3bc642059ef3a91247bcfcc5806"},
+]
+jmp = [
+    {file = "jmp-0.0.2-py3-none-any.whl", hash = "sha256:48f94b2ba0c9db759851a23cce2fbfa622e954c3c811651bc11b196246f02527"},
+    {file = "jmp-0.0.2.tar.gz", hash = "sha256:fdb5cec0d10aab4116c2770f24b2adf4f503fcfbb96ce8ef583e1879bdbf1b9b"},
 ]
 keyring = [
     {file = "keyring-23.5.0-py3-none-any.whl", hash = "sha256:b0d28928ac3ec8e42ef4cc227822647a19f1d544f21f96457965dc01cf555261"},

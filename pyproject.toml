@@ -12,6 +12,7 @@ jax = "^0.3.8"
 einops = "^0.4.1"
 jaxlib = "^0.3.7"
 torch = "^1.11.0"
+jmp = "^0.0.2"
 
 [tool.poetry.dev-dependencies]
 twine = "^4.0.0"

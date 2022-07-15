@@ -5,6 +5,7 @@ import numpy as np
 import functools
 import jaxtorch.monkeypatches
 import sys
+from dataclasses import dataclass
 
 def _addindent(s_, numSpaces):
     s = s_.split('\n')
@@ -75,14 +76,14 @@ random number generation that use the Context's stateful PRNG.
     uniform = _wrap(jax.random.uniform)
     weibull_min = _wrap(jax.random.weibull_min)
 
-@jax.tree_util.register_pytree_node_class
 class Context(object):
     """Wraps a parameter dictionary and a PRNG."""
-    def __init__(self, px, key, mode='train'):
+    def __init__(self, px, key, mode='train', tmp=None):
         self.px = px
         self.rng = PRNG(key)
         self.random = ContextRandom(self.rng)
         self.mode = mode
+        self.tmp = dict(tmp or {})
 
     def train_mode_(self):
         self.mode = 'train'
@@ -108,18 +109,53 @@ class Context(object):
         else:
             raise TypeError('Expected a Param for indexing into Context')
 
-    # TODO: having this might be a bad idea if it breaks future
-    # features, might need a dedicated wrapper for transforming cx
-    # functions.
+    def freeze(self):
+        return FrozenContext(self.px, self.rng.key, self.mode, self.tmp)
+
+@jax.tree_util.register_pytree_node_class
+@dataclass
+class FrozenContext(object):
+    params: dict
+    key: jax.random.PRNGKey
+    mode: str
+    tmp: dict
+
+    def thaw(self):
+        return Context(self.params, self.key, self.mode, self.tmp)
+
+    def thaw_into(self, cx):
+        cx.rng.key = self.key
+        cx.px.update(self.params)
+        cx.tmp = dict(self.tmp)
+        return cx
+
     def tree_flatten(self):
-        return (self.px, self.rng.split()), (self.mode,)
+        return (self.params, self.key, self.tmp), (self.mode,)
 
     @staticmethod
-    def tree_unflatten(aux, values):
-        (px, key) = values
-        (mode,) = aux
-        return Context(px, key, mode=mode)
+    def tree_unflatten(static, dynamic):
+        (params, key, tmp) = dynamic
+        (mode,) = static
+        return FrozenContext(params, key, mode, tmp)
 
+def transform_with_cx(*transforms):
+    def tr(func):
+        # Inner wrapped function: pure functional, inputs and outputs frozen context
+        def inner(frozen_cx, *args, **kwargs):
+            cx = frozen_cx.thaw()
+            result = func(cx, *args, **kwargs)
+            return cx.freeze(), result
+        # Transform pure function
+        for t in reversed(transforms):
+            inner = t(inner)
+        # Wrap the transformed pure function to accept Context
+        def outer(cx, *args, **kwargs):
+            frozen_cx = cx.freeze()
+            frozen_cx, result = inner(frozen_cx, *args, **kwargs)
+            frozen_cx.thaw_into(cx)
+            return result
+        return outer
+    return tr
 
 class Module(object):
     def __call__(self, cx: Context, *args, **kwargs):
@@ -147,15 +183,21 @@ class Module(object):
             if isinstance(val, Param):
                 yield (name, val)
 
+    def post_init_weights(self, cx):
+        pass
+
     def self_init_weights(self, cx):
         """Initializes weights for this network's parameters. May be overriden
            for custom initialization. Child modules are initialized
            before parents.
 
         """
+        for (name, mod) in self.self_named_modules():
+            mod.self_init_weights(cx)
         for (name, par) in self.self_named_parameters():
             if par.initializer is not None:
                 cx[par] = par.initializer(cx.rng.split())
+        self.post_init_weights(cx)
 
     def init_weights(self, key):
         """Attaches names to parameters and returns initialized dict of
@@ -164,8 +206,6 @@ class Module(object):
         """
         self.labeled_parameters_()
         cx = Context({}, key)
-        for module in self.gen_postorder_modules():
-            module.self_init_weights(cx)
         self.self_init_weights(cx)
         return cx.px
 
@@ -199,6 +239,9 @@ class Module(object):
 
     def named_parameters(self):
         return list(self.gen_named_parameters())
+
+    def named_modules(self):
+        return list(self.gen_named_modules())
 
     def modules(self):
         return [m for (k, m) in self.gen_named_modules()]
@@ -250,11 +293,10 @@ class Module(object):
         if extra_repr:
             extra_lines = extra_repr.split('\n')
         child_lines = []
-        for key, module in self.__dict__.items():
-            if isinstance(module, Module):
-                mod_str = repr(module)
-                mod_str = _addindent(mod_str, 2)
-                child_lines.append('(' + key + '): ' + mod_str)
+        for key, module in self.self_named_modules():
+            mod_str = repr(module)
+            mod_str = _addindent(mod_str, 2)
+            child_lines.append('(' + key + '): ' + mod_str)
         lines = extra_lines + child_lines
 
         main_str = self._get_name() + '('

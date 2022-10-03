@@ -35,8 +35,10 @@ class PRNG(object):
     """Just a stateful wrapper for a jax.random.PRNGKey."""
     def __init__(self, key):
         self.key = key
-    def split(self):
+    def split(self, n=None):
         (self.key, subkey) = jax.random.split(self.key)
+        if n is not None:
+            subkey = jax.random.split(subkey, n)
         return subkey
 
 class ContextRandom(object):

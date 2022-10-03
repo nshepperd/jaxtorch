@@ -8,7 +8,7 @@ import jax.numpy as jnp
 import jaxlib
 import numpy as np
 import functools
-from einops import rearrange
+from einops import rearrange, reduce, repeat
 
 def register(**kwargs):
     for (attr, fun) in kwargs.items():
@@ -48,9 +48,13 @@ register(
     arccos = jnp.arccos,
     log = jnp.log,
     exp = jnp.exp,
+    expm1 = jnp.expm1,
+    log1p = jnp.log1p,
+    neg = lambda x: -x,
     clamp = lambda a, minval=None, maxval=None: jnp.clip(a, a_min=minval, a_max=maxval),
     unsqueeze = lambda arr, axis=0: jnp.expand_dims(arr, axis),
     rearrange = rearrange,
+    reduce = reduce,
     broadcast_to = broadcast_to,
     isfinite = jnp.isfinite,
     isnan = jnp.isnan,

@@ -1,0 +1,4 @@
+cbor2
+torch
+jax
+einops

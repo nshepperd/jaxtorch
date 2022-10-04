@@ -204,7 +204,12 @@ class Conv2d(Module):
             self.weight = init.zeros(out_channels, in_channels//groups, kernel_size, kernel_size)
         self.use_bias = bias
         if self.use_bias:
-            self.bias = init.zeros(out_channels)
+            if zero_init:
+                self.bias = init.zeros(out_channels)
+            else:
+                fan_in = in_channels//groups * kernel_size**2
+                bound = 1 / math.sqrt(fan_in)
+                self.bias = init.uniform(out_channels, min=-bound, max=bound)
         else:
             self.bias = None
 

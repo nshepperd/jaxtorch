@@ -35,5 +35,5 @@ setup(
             open(os.path.join(os.path.dirname(__file__), "requirements.txt"))
         )
     ],
-    extras_require={'dev': ['pytest']},
+    extras_require={'dev': []},
 )

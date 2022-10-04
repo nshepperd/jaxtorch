@@ -50,7 +50,10 @@ random number generation that use the Context's stateful PRNG.
         self.rng = rng
 
     def _wrap(f):
-        return lambda self, *args, **kwargs: f(self.rng.split(), *args, **kwargs)
+        @functools.wraps(f)
+        def wrapped(self, *args, **kwargs):
+            return f(self.rng.split(), *args, **kwargs)
+        return wrapped
 
     bernoulli = _wrap(jax.random.bernoulli)
     beta = _wrap(jax.random.beta)
@@ -160,6 +163,8 @@ def transform_with_cx(*transforms):
     return tr
 
 class Module(object):
+    name = None
+
     def __call__(self, cx: Context, *args, **kwargs):
         return self.forward(cx, *args, **kwargs)
 
@@ -201,20 +206,21 @@ class Module(object):
                 cx[par] = par.initializer(cx.rng.split())
         self.post_init_weights(cx)
 
+    def name_everything_(self):
+        for (name, par) in self.named_parameters():
+            par.name = name
+        for (name, mod) in self.named_modules():
+            mod.name = name
+
     def init_weights(self, key):
         """Attaches names to parameters and returns initialized dict of
            parameters by name.
 
         """
-        self.labeled_parameters_()
+        self.name_everything_()
         cx = Context({}, key)
         self.self_init_weights(cx)
         return cx.px
-
-    def labeled_parameters_(self):
-        for (name, par) in self.named_parameters():
-            par.name = name
-        return self.parameters()
 
     def gen_named_modules(self):
         "Yields (str, Module) for all descendants of this module."
@@ -222,13 +228,6 @@ class Module(object):
             yield (name, val)
             for (k, v) in val.gen_named_modules():
                 yield (name+'.'+k, v)
-
-    def gen_postorder_modules(self):
-        "Yields Module for all descendants of this module (postorder traversal)."
-        for (name, mod) in self.self_named_modules():
-            for submod in mod.gen_postorder_modules():
-                yield submod
-            yield mod
 
     def gen_named_parameters(self):
         "Yields (str, Param) for this module and all descendants."

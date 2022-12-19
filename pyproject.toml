@@ -6,13 +6,13 @@ authors = ["Your Name <you@example.com>"]
 
 [tool.poetry.dependencies]
 python = ">=3.8,<3.11"
-numpy = "^1.22.3"
-scipy = "^1.8.0"
-jax = "^0.3.8"
-einops = "^0.4.1"
-jaxlib = "^0.3.7"
-torch = "^1.11.0"
-jmp = "^0.0.2"
+numpy = ">=1.22.3"
+scipy = ">=1.8.0"
+jax = ">=0.3.8,<=0.5"
+einops = ">=0.4.1"
+jaxlib = ">=0.3.7,<=0.5"
+torch = ">=1.11.0"
+jmp = ">=0.0.2"
 
 [tool.poetry.dev-dependencies]
 twine = "^4.0.0"

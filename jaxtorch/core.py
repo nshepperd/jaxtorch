@@ -206,6 +206,10 @@ class Module(object):
                 cx[par] = par.initializer(cx.rng.split())
         self.post_init_weights(cx)
 
+    def labeled_parameters_(self):
+        self.name_everything_()
+        return self.parameters()
+
     def name_everything_(self):
         for (name, par) in self.named_parameters():
             par.name = name

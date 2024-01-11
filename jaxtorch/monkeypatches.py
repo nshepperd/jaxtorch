@@ -61,4 +61,5 @@ register(
     broadcast_to = broadcast_to,
     isfinite = jnp.isfinite,
     isnan = jnp.isnan,
+    logical_not = jnp.logical_not,
 )

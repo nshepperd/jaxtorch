@@ -10,13 +10,16 @@ import numpy as np
 import functools
 from einops import rearrange, reduce, repeat
 
+from jaxtorch._util import ArrayTypes
+
+
 def register(**kwargs):
     for (attr, fun) in kwargs.items():
         if hasattr(jnp.zeros([]), attr):
             print(f'Not monkeypatching DeviceArray and Tracer with `{attr}`, because that method is already implemented.', file=sys.stderr)
             continue
-        setattr(jaxlib.xla_extension.DeviceArrayBase, attr, fun)
-        setattr(jax.interpreters.xla.DeviceArray, attr, fun)
+        for ty in ArrayTypes:
+            setattr(ty, attr, fun)
         setattr(jax.core.Tracer, attr, fun)
 
 def broadcast_to(arr, shape):

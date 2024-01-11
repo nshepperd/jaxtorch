@@ -22,6 +22,9 @@ class ModuleList(Module):
             else:
                 raise ValueError("Expected module or sequence to ModuleList()")
 
+    def __len__(self):
+        return len(self.items)
+
     def __iter__(self):
         return iter(self.items)
 

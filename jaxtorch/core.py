@@ -162,7 +162,21 @@ def transform_with_cx(*transforms):
         return outer
     return tr
 
+# TODO: want to figure out a better initialization story.  Pytorch
+# does it by creating the tensors in __init__, which doesn't really
+# work here because we don't have the parameter dict to store them in
+# at that point. Right now the canonical way is to call
+# init_weights(key), which pretty much works, but I kind of dislike
+# because that memory would immediately get deallocated if you load a
+# state dict.
 class Module(object):
+    """Roughly equivalent of pytorch Modules, except parameters are
+    stored externally, in a parameter dictionary.
+
+    Params hold the name of the parameter, to make it easy to look
+    them up.
+
+    """
     name = None
 
     def __call__(self, cx: Context, *args, **kwargs):

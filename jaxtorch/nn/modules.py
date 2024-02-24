@@ -148,7 +148,6 @@ class LeakyReLU(Module):
     def forward(self, cx, x):
         return jax.nn.leaky_relu(x, self.negative_slope)
 
-
 class LayerNorm(Module):
     def __init__(self, normalized_shape, eps=1e-05, elementwise_affine=True):
         if isinstance(normalized_shape, numbers.Integral):
@@ -165,9 +164,14 @@ class LayerNorm(Module):
         self.axes = tuple(-i for i in range(1, len(normalized_shape)+1))
 
     def forward(self, cx, x):
+        dtype = x.dtype
         mu = x.mean(axis=self.axes, keepdims=True)
-        sigma = jnp.sqrt((x - mu).square().mean(axis=self.axes, keepdims=True) + self.eps)
-        normed = (x - mu) / sigma
+        x = x - mu
+        if x.dtype in [jnp.float16, jnp.bfloat16]:
+            sigma = jnp.sqrt(x.astype(jnp.float32).square().mean(axis=self.axes, keepdims=True) + self.eps).astype(dtype)
+        else:
+            sigma = jnp.sqrt(x.square().mean(axis=self.axes, keepdims=True) + self.eps)
+        normed = x / sigma
         return cx[self.weight] * normed + cx[self.bias]
 
 

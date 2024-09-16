@@ -172,7 +172,9 @@ class LayerNorm(Module):
         else:
             sigma = jnp.sqrt(x.square().mean(axis=self.axes, keepdims=True) + self.eps)
         normed = x / sigma
-        return cx[self.weight] * normed + cx[self.bias]
+        if self.elementwise_affine:
+            return cx[self.weight] * normed + cx[self.bias]
+        return normed
 
 
 class Conv1d(Module):

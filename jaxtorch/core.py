@@ -75,7 +75,7 @@ random number generation that use the Context's stateful PRNG.
     poisson = _wrap(jax.random.poisson)
     rademacher = _wrap(jax.random.rademacher)
     randint = _wrap(jax.random.randint)
-    shuffle = _wrap(jax.random.shuffle)
+    # shuffle = _wrap(jax.random.shuffle)
     t = _wrap(jax.random.t)
     truncated_normal = _wrap(jax.random.truncated_normal)
     uniform = _wrap(jax.random.uniform)

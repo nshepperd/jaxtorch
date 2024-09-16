@@ -24,8 +24,8 @@ def register(**kwargs):
 
 def broadcast_to(arr, shape):
   shape = (shape,) if jnp.ndim(shape) == 0 else shape
-  shape = jax.core.canonicalize_shape(shape)  # check that shape is concrete
-  arr_shape = jax.core.canonicalize_shape(arr.shape)
+  shape = tuple(shape)  # check that shape is concrete
+  arr_shape = tuple(arr.shape)
   if arr_shape == shape:
       return arr
   nlead = len(shape) - len(arr_shape)

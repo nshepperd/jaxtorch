@@ -22,6 +22,9 @@ def register(**kwargs):
             setattr(ty, attr, fun)
         setattr(jax.core.Tracer, attr, fun)
 
+# jnp.broadcast_to is implemented in terms of jax.Array.broadcast_to
+# if it exists, so we need to reimplement it to not cause an infinite recursion.
+# Annoying.
 def broadcast_to(arr, shape):
   shape = (shape,) if jnp.ndim(shape) == 0 else shape
   shape = tuple(shape)  # check that shape is concrete

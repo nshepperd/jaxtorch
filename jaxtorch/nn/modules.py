@@ -13,38 +13,41 @@ class Identity(Module):
 
 class ModuleList(Module):
     def __init__(self, *items):
-        self.items = []
+        super().__init__()
         for item in items:
             if isinstance(item, Module):
-                self.items.append(item)
+                self.append(item)
             elif isinstance(item, (list, tuple)):
-                self.items.extend(item)
+                self.extend(item)
             else:
                 raise ValueError("Expected module or sequence to ModuleList()")
 
     def __len__(self):
-        return len(self.items)
+        return len(self._modules)
 
     def __iter__(self):
-        return iter(self.items)
+        return iter(self._modules.values())
 
     def __getitem__(self, index):
         if isinstance(index, slice):
-            return type(self)(self.items[index])
+            # Slice returns the part as a list.
+            return list(self._modules.values())[index]
         elif isinstance(index, int):
-            return self.items[index]
+            return self._modules[str(index)]
         else:
             raise TypeError("Invalid argument type.")
 
     def append(self, mod):
-        self.items.append(mod)
+        name = str(len(self._modules))
+        self._modules[name] = mod
+        mod.set_name(self.name + '.' + name if self.name else name)
+    
+    def extend(self, mods):
+        for mod in mods:
+            self.append(mod)
 
     def forward(self, cx, x):
         raise NotImplementedError
-
-    def self_named_modules(self):
-        for (i, m) in enumerate(self.items):
-            yield (f'{i}', m)
 
 
 class Sequential(ModuleList):
@@ -89,18 +92,7 @@ class Embedding(Module):
 
     def extra_repr(self) -> str:
         s = '{num_embeddings}, {embedding_dim}'
-        # if self.padding_idx is not None:
-        #     s += ', padding_idx={padding_idx}'
-        # if self.max_norm is not None:
-        #     s += ', max_norm={max_norm}'
-        # if self.norm_type != 2:
-        #     s += ', norm_type={norm_type}'
-        # if self.scale_grad_by_freq is not False:
-        #     s += ', scale_grad_by_freq={scale_grad_by_freq}'
-        # if self.sparse is not False:
-        #     s += ', sparse=True'
         return s.format(**self.__dict__)
-
 
 
 class Tanh(Module):
@@ -110,6 +102,7 @@ class Tanh(Module):
 
 class Dropout(Module):
     def __init__(self, p=0.5):
+        super().__init__()
         self.rate = p
 
     def forward(self, cx, x):
@@ -120,6 +113,7 @@ class Dropout(Module):
 
 class Dropout2d(Module):
     def __init__(self, p=0.5):
+        super().__init__()
         self.rate = p
 
     def forward(self, cx, x):
@@ -143,6 +137,7 @@ class ReLU(Module):
 
 class LeakyReLU(Module):
     def __init__(self, negative_slope=0.01):
+        super().__init__()
         self.negative_slope = negative_slope
 
     def forward(self, cx, x):
@@ -150,6 +145,7 @@ class LeakyReLU(Module):
 
 class LayerNorm(Module):
     def __init__(self, normalized_shape, eps=1e-05, elementwise_affine=True):
+        super().__init__()
         if isinstance(normalized_shape, numbers.Integral):
             normalized_shape = (normalized_shape,)
         self.normalized_shape = tuple(normalized_shape)
@@ -179,6 +175,7 @@ class LayerNorm(Module):
 
 class Conv1d(Module):
     def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, dilation=1, groups=1, bias=True, zero_init=False):
+        super().__init__()
         assert in_channels % groups == 0
         self.stride = stride
         self.padding = padding
@@ -203,6 +200,7 @@ class Conv1d(Module):
 
 class Conv2d(Module):
     def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, dilation=1, groups=1, bias=True, zero_init=False):
+        super().__init__()
         assert in_channels % groups == 0
         self.stride = stride
         self.padding = padding
@@ -236,6 +234,7 @@ class SiLU(Module):
 
 class GroupNorm(Module):
     def __init__(self, num_groups, num_channels, eps=1e-05, affine=True):
+        super().__init__()
         self.num_groups = num_groups
         self.num_channels = num_channels
         assert self.num_channels % self.num_groups == 0
@@ -265,12 +264,14 @@ class GroupNorm(Module):
 
 class PixelUnshuffle(Module):
     def __init__(self, downscale_factor):
+        super().__init__()
         self.downscale_factor = downscale_factor
     def forward(self, cx, x):
         return x.rearrange('... c (h r) (w s) -> ... (c r s) h w', r = self.downscale_factor, s = self.downscale_factor)
 
 class PixelShuffle(Module):
     def __init__(self, upscale_factor):
+        super().__init__()
         self.upscale_factor = upscale_factor
     def forward(self, cx, x):
         return x.rearrange('... (c r s) h w -> ... c (h r) (w s)', r = self.upscale_factor, s = self.upscale_factor)

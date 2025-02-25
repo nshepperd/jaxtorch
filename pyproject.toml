@@ -1,0 +1,29 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "jaxtorch"
+dynamic = ["version"]
+description = "A jax based nn library"
+readme = "README.md"
+authors = [
+    { name = "Emily Shepperd" }
+]
+license = { text = "MIT" }
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+]
+
+dependencies = ["torch", "jax", "einops"]
+
+[project.urls]
+Homepage = "https://github.com/nshepperd/jaxtorch"
+
+[tool.hatch.version]
+path = "jaxtorch/_version.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["jaxtorch"]

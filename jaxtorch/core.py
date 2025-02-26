@@ -271,7 +271,7 @@ class Module(object):
     """
 
     name: str
-    _modules: OrderedDict[str, Any]
+    _modules: OrderedDict[str, Module]
     _params: OrderedDict[str, Param]
 
     def __init__(self):

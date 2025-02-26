@@ -27,3 +27,8 @@ path = "jaxtorch/_version.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["jaxtorch"]
+
+[tool.pytest.ini_options]
+addopts = [
+    "--import-mode=importlib",
+]

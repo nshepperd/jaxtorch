@@ -1,4 +1,5 @@
 import math
+from typing import Iterable, Iterator
 import jax
 import jax.numpy as jnp
 import jaxtorch
@@ -37,17 +38,15 @@ class ModuleList(Module):
         else:
             raise TypeError("Invalid argument type.")
 
-    def append(self, mod):
+    def append(self, mod: Module):
         name = str(len(self._modules))
         self._modules[name] = mod
         mod.set_name(self.name + '.' + name if self.name else name)
     
-    def extend(self, mods):
+    def extend(self, mods: Iterable[Module]):
         for mod in mods:
             self.append(mod)
 
-    def forward(self, cx, x):
-        raise NotImplementedError
 
 
 class Sequential(ModuleList):
@@ -62,9 +61,10 @@ class Linear(Module):
         super().__init__()
         self.in_features = in_features
         self.out_features = out_features
-        self.weight = init.glorot_normal(out_features, in_features)
+        A = 1.0/jnp.sqrt(in_features)
+        self.weight = init.uniform(out_features, in_features, min=-A, max=A)
         if bias:
-            self.bias = init.zeros(out_features)
+            self.bias = init.uniform(out_features, min=-A, max=A)
         else:
             self.bias = None
 
@@ -128,8 +128,11 @@ class Sigmoid(Module):
         return jax.nn.sigmoid(x)
 
 class GELU(Module):
+    def __init__(self, approximate='none'):
+        super().__init__()
+        self.approximate = approximate
     def forward(self, cx, x):
-        return jax.nn.gelu(x)
+        return jax.nn.gelu(x, approximate=self.approximate == 'tanh')
 
 class ReLU(Module):
     def forward(self, cx, x):
@@ -181,12 +184,13 @@ class Conv1d(Module):
         self.padding = padding
         self.dilation = dilation
         self.groups = groups
-        self.weight = init.kaiming_uniform(out_channels, in_channels//groups, kernel_size, a=math.sqrt(5.0))
+        A = jnp.sqrt(groups/(in_channels*kernel_size))
+        self.weight = init.uniform(out_channels, in_channels//groups, kernel_size, min=-A, max=A)
         if zero_init:
             self.weight = init.zeros(out_channels, in_channels//groups, kernel_size)
         self.use_bias = bias
         if self.use_bias:
-            self.bias = init.zeros(out_channels)
+            self.bias = init.uniform(out_channels, min=-A, max=A)
         else:
             self.bias = None
 
@@ -206,17 +210,18 @@ class Conv2d(Module):
         self.padding = padding
         self.dilation = dilation
         self.groups = groups
-        self.weight = init.kaiming_uniform(out_channels, in_channels//groups, kernel_size, kernel_size, a=math.sqrt(5.0))
+        if isinstance(kernel_size, int):
+            kernel_size = (kernel_size, kernel_size)
+        A = jnp.sqrt(groups/(in_channels*kernel_size[0]*kernel_size[1]))
+        self.weight = init.uniform(out_channels, in_channels//groups, *kernel_size, min=-A, max=A)
         if zero_init:
-            self.weight = init.zeros(out_channels, in_channels//groups, kernel_size, kernel_size)
+            self.weight = init.zeros(out_channels, in_channels//groups, *kernel_size)
         self.use_bias = bias
         if self.use_bias:
             if zero_init:
                 self.bias = init.zeros(out_channels)
             else:
-                fan_in = in_channels//groups * kernel_size**2
-                bound = 1 / math.sqrt(fan_in)
-                self.bias = init.uniform(out_channels, min=-bound, max=bound)
+                self.bias = init.uniform(out_channels, min=-A, max=A)
         else:
             self.bias = None
 

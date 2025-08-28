@@ -24,6 +24,7 @@ dependencies = [
 
 [dependency-groups]
 test = ["pytest", "torch", "cbor2", "jax[cuda12]"]
+demo = ["tqdm", "optax", "jax[cuda12]", "ipykernel"]
 
 [project.urls]
 Homepage = "https://github.com/nshepperd/jaxtorch"

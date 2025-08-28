@@ -1,10 +1,11 @@
 import jax
 import jax.numpy as jnp
-import torch
-import torch.nn.init as torch_init
 import numpy as np
 import pytest
-from jaxtorch import init, PRNG
+import torch
+import torch.nn.init as torch_init
+
+from jaxtorch import PRNG, init
 
 # Set seeds for reproducibility
 SEED = 42

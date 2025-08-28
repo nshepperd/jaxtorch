@@ -1,10 +1,8 @@
 """Wraps cbor2 with hooks for encoding and decoding tensors."""
 import jax
-import cbor2
+import jax.numpy as jnp
 import numpy as np
-import functools
-
-from cbor2 import CBORTag
+from functools import partial
 
 # Standard tags for multidimensional arrays from RFC8746
 # (little-endian, row-major).
@@ -15,25 +13,28 @@ TAG_INT64 = 79
 TAG_ARRAY = 40
 
 def encode_flat(arr):
+    from cbor2 import CBORTag
     if arr.dtype == np.float32:
         return CBORTag(TAG_FLOAT32, arr.tobytes())
     if arr.dtype == np.int32:
         return CBORTag(TAG_INT32, arr.tobytes())
     else:
-        raise NotImplemented
+        raise NotImplementedError(f"Cannot encode array of dtype {arr.dtype}")
 
 def default_encoder(encoder, value):
-    if isinstance(value, jax.numpy.DeviceArray):
+    from cbor2 import CBORTag
+    if isinstance(value, jax.Array):
         encoder.encode(np.array(value))
     elif isinstance(value, np.ndarray):
         encoder.encode(CBORTag(TAG_ARRAY, [list(value.shape), encode_flat(value)]))
     else:
-        raise NotImplemented
+        raise NotImplementedError(f"Cannot encode object of type {type(value)}")
 
-def tag_hook(decoder, tag, shareable_index=None):
+def tag_hook(decoder, tag, shareable_index=None, device=None):
     if tag.tag == TAG_ARRAY:
         [shape, value] = tag.value
-        return value.reshape(shape)
+        assert isinstance(value, np.ndarray)
+        return jnp.asarray(value.reshape(shape))
     elif tag.tag == TAG_FLOAT32:
         return np.frombuffer(tag.value, dtype=np.float32)
     elif tag.tag == TAG_INT32:
@@ -43,8 +44,18 @@ def tag_hook(decoder, tag, shareable_index=None):
     else:
         return tag
 
-dumps = functools.partial(cbor2.dumps, default=default_encoder)
-dump = functools.partial(cbor2.dump, default=default_encoder)
+def dumps(obj, **kwargs):
+    import cbor2
+    return cbor2.dumps(obj, default=default_encoder, **kwargs)
 
-loads = functools.partial(cbor2.loads, tag_hook=tag_hook)
-load = functools.partial(cbor2.load, tag_hook=tag_hook)
+def dump(obj, fp, **kwargs):
+    import cbor2
+    return cbor2.dump(obj, fp, default=default_encoder, **kwargs)
+
+def loads(s, *, device=None, **kwargs):
+    import cbor2
+    return cbor2.loads(s, tag_hook=partial(tag_hook, device=device), **kwargs)
+
+def load(fp, *, device=None, **kwargs):
+    import cbor2
+    return cbor2.load(fp, tag_hook=partial(tag_hook, device=device), **kwargs)

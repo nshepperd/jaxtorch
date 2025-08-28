@@ -1,12 +1,12 @@
-import sys
-sys.path = ['.'] + sys.path
 import numpy as np
 import jax
 import jax.numpy as jnp
 import jaxtorch
 
 def check_near(x, y):
-    assert (x - y).abs().max() < 1e-6, x-y
+    x = np.array(x)
+    y = np.array(y)
+    np.testing.assert_allclose(x, y, rtol=1e-6, atol=1e-6)
 
 def test_upsample2x():
     image = jax.random.normal(jax.random.PRNGKey(0), (1,1,10,10))

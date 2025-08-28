@@ -17,7 +17,13 @@ classifiers = [
     "Programming Language :: Python :: 3.9",
 ]
 
-dependencies = ["torch", "jax", "einops"]
+dependencies = [
+    "jax", 
+    "einops"
+]
+
+[dependency-groups]
+test = ["pytest", "torch", "cbor2", "jax[cuda12]"]
 
 [project.urls]
 Homepage = "https://github.com/nshepperd/jaxtorch"

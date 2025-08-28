@@ -1,11 +1,12 @@
-import math
-from typing import Iterable, Iterator
+from typing import Iterable, Sequence
+
 import jax
 import jax.numpy as jnp
+
 import jaxtorch
-import numbers
-from jaxtorch.core import Module, PRNG, Context
 from jaxtorch import init
+from jaxtorch.core import Context, Module
+
 
 class Identity(Module):
     def forward(self, cx, x):
@@ -147,9 +148,9 @@ class LeakyReLU(Module):
         return jax.nn.leaky_relu(x, self.negative_slope)
 
 class LayerNorm(Module):
-    def __init__(self, normalized_shape, eps=1e-05, elementwise_affine=True):
+    def __init__(self, normalized_shape: int | Sequence[int], eps=1e-05, elementwise_affine=True):
         super().__init__()
-        if isinstance(normalized_shape, numbers.Integral):
+        if isinstance(normalized_shape, int):
             normalized_shape = (normalized_shape,)
         self.normalized_shape = tuple(normalized_shape)
         self.eps = eps
@@ -162,15 +163,13 @@ class LayerNorm(Module):
             self.bias = None
         self.axes = tuple(-i for i in range(1, len(normalized_shape)+1))
 
-    def forward(self, cx, x):
+    def forward(self, cx: Context, x: jax.Array):
         dtype = x.dtype
+        x = jnp.asarray(x, dtype=jnp.float32)
         mu = x.mean(axis=self.axes, keepdims=True)
         x = x - mu
-        if x.dtype in [jnp.float16, jnp.bfloat16]:
-            sigma = jnp.sqrt(x.astype(jnp.float32).square().mean(axis=self.axes, keepdims=True) + self.eps).astype(dtype)
-        else:
-            sigma = jnp.sqrt(x.square().mean(axis=self.axes, keepdims=True) + self.eps)
-        normed = x / sigma
+        sigma = jnp.sqrt(jnp.square(x).mean(axis=self.axes, keepdims=True) + self.eps)
+        normed = (x / sigma).astype(dtype)
         if self.elementwise_affine:
             return cx[self.weight] * normed + cx[self.bias]
         return normed

@@ -1,15 +1,13 @@
 from __future__ import annotations
-__docformat__ = "google"
+
+import functools
+import sys
+import warnings
+from collections import OrderedDict
+from dataclasses import dataclass, field
+from typing import Any, Callable, Dict, Generic, Optional, Sequence, TypeVar
 
 import jax
-import numpy as np
-import functools
-import jaxtorch.monkeypatches
-import sys
-from dataclasses import dataclass
-from typing import TypeVar, Generic, Any, Dict
-from collections import OrderedDict
-import warnings
 
 
 def _addindent(s_, numSpaces):
@@ -26,6 +24,9 @@ def _addindent(s_, numSpaces):
 
 class Param(object):
     """Represents a parameter of a Module, and specifies its shape and initialization."""
+    shape: Sequence[int]
+    initializer: Optional[Callable[[jax.Array], jax.Array]]
+    name: str | None
 
     def __init__(self, shape, initializer=None):
         self.shape = shape
@@ -38,7 +39,7 @@ class Param(object):
 
     def set_name(self, name: str):
         if self.name and not name.endswith(self.name):
-            raise ValueError(
+            warnings.warn(
                 f"Changing name of Param from {self.name} to {name}, this is probably a bug."
             )
         self.name = name
@@ -80,6 +81,7 @@ class ContextRandom(object):
     def __init__(self, rng: PRNG):
         self._rng = rng
 
+    @staticmethod
     def _wrap(f):
         @functools.wraps(f)
         def wrapped(self, *args, **kwargs):
@@ -144,9 +146,10 @@ class Context(object):
     def __init__(
         self,
         params: Dict[str, jax.Array],
-        key: jax.Array,
+        key: Optional[jax.Array],
+        *,
         mode: str = "train",
-        user: dict = None,
+        user: dict | None = None,
     ):
         self.params = params
         self.rng = PRNG(key)
@@ -164,6 +167,8 @@ class Context(object):
 
     def __getitem__(self, par):
         if isinstance(par, Param):
+            if par.name is None:
+                raise ValueError("Param has no name, did you forget to assign it to a Module?")
             return self.params[par.name]
         elif isinstance(par, str):
             return self.params[par]
@@ -172,6 +177,8 @@ class Context(object):
 
     def __setitem__(self, par, value):
         if isinstance(par, Param):
+            if par.name is None:
+                raise ValueError("Param has no name, did you forget to assign it to a Module?")
             self.params[par.name] = value
         elif isinstance(par, str):
             self.params[par] = value
@@ -179,36 +186,27 @@ class Context(object):
             raise TypeError("Expected a Param for indexing into Context")
 
     def freeze(self):
-        return FrozenContext(self.params, self.rng.key, self.mode, self.tmp)
+        return FrozenContext(self.params, self.rng.key, mode=self.mode, user=self.user)
 
 
-@jax.tree_util.register_pytree_node_class
+@jax.tree_util.register_dataclass
 @dataclass
 class FrozenContext(object):
     """Immutable version of `Context` compatible with jax transformations."""
 
     params: Dict[str, jax.Array]
     key: jax.Array
-    mode: str
+    mode: str = field(metadata=dict(static=True))
     user: dict
 
     def thaw(self):
-        return Context(self.params, self.key, self.mode, self.user)
+        return Context(self.params, self.key, mode=self.mode, user=self.user)
 
     def thaw_into(self, cx):
         cx.rng.key = self.key
         cx.params.update(self.params)
         cx.user = dict(self.user)
         return cx
-
-    def tree_flatten(self):
-        return (self.params, self.key, self.user), (self.mode,)
-
-    @staticmethod
-    def tree_unflatten(static, dynamic):
-        (params, key, user) = dynamic
-        (mode,) = static
-        return FrozenContext(params, key, mode, user)
 
 
 def transform_with_cx(*transforms):
@@ -270,7 +268,7 @@ class Module(object):
 
     """
 
-    name: str
+    name: str | None
     _modules: OrderedDict[str, Module]
     _params: OrderedDict[str, Param]
 
@@ -327,16 +325,7 @@ class Module(object):
         for name, par in self._params.items():
             par.setup(cx)
 
-        if hasattr(self, "self_init_weights"):
-            raise ValueError("self_init_weights is deprecated, override setup instead")
-        if hasattr(self, "post_init_weights"):
-            warnings.warn(
-                "post_init_weights is deprecated, override setup instead",
-                DeprecationWarning,
-            )
-            self.post_init_weights(cx)
-
-    def initialize(self, key: jax.random.PRNGKey) -> dict[str, jax.Array]:
+    def initialize(self, key: jax.Array) -> dict[str, jax.Array]:
         """Initialize the model.
 
         You could jit this to control where the parameters are stored, or to avoid
@@ -348,14 +337,6 @@ class Module(object):
 
     def init_weights(self, key):
         return self.initialize(key)
-
-    def name_everything_(self):
-        """No-op for compatibility (modules and params are named when assigned now)."""
-        warnings.warn(
-            "name_everything_ is deprecated, you don't need to call this any more",
-            DeprecationWarning,
-        )
-        pass
 
     def gen_named_modules(self):
         "Yields (str, Module) for all descendants of this module."

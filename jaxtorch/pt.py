@@ -5,27 +5,24 @@ checkpoint files.
 
 import jax
 import jax.numpy as jnp
-import jaxlib
 import numpy as np
-import torch
 
-from jaxtorch._util import ArrayTypes
 
-@torch.no_grad()
-def load(f):
+def load(f, device=None):
     """Converts torch.Tensor back to jax arrays after loading."""
+    import torch
     def from_torch(x):
         if isinstance(x, torch.Tensor):
-            return jnp.asarray(x)
+            return jnp.asarray(x.detach().cpu().numpy(), device=device)
         return x
     torch_dict = torch.load(f, map_location='cpu')
     return jax.tree_util.tree_map(from_torch, torch_dict)
 
-@torch.no_grad()
 def save(obj, f):
     """Converts jax arrays to torch.Tensor before saving."""
+    import torch
     def to_torch(x):
-        if isinstance(x, ArrayTypes):
+        if isinstance(x, jax.Array):
             return torch.as_tensor(np.array(x))
         return x
     torch_dict = jax.tree_util.tree_map(to_torch, obj)

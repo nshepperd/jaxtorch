@@ -6,8 +6,6 @@ import jaxtorch
 from jaxtorch.core import Module, Context, PRNG
 jax.config.update("jax_default_matmul_precision", "float32")
 
-torch.backends.cudnn.deterministic = True
-
 def check(old, new, rtol=1e-6, atol=1e-6):
     old_np = np.asarray(old)
     new_np = np.asarray(new)

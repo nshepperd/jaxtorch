@@ -5,7 +5,7 @@ import sys
 import warnings
 from collections import OrderedDict
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, Generic, Optional, Sequence, TypeVar
+from typing import Any, Callable, Dict, Generator, Generic, Optional, Sequence, Tuple, TypeVar
 
 import jax
 
@@ -37,6 +37,11 @@ class Param(object):
         if self.initializer is not None:
             cx[self] = self.initializer(cx.rng.split())
 
+    def get_name(self) -> str:
+        if self.name is None:
+            raise ValueError("Param has no name, did you forget to assign it to a Module?")
+        return self.name
+
     def set_name(self, name: str):
         if self.name and not name.endswith(self.name):
             warnings.warn(
@@ -50,6 +55,13 @@ class Param(object):
         else:
             return super().__repr__()
 
+class Buffer(Param):
+    """Non-trainable params"""
+    persistent: bool
+
+    def __init__(self, shape, *, initializer = None, persistent: bool = True):
+        super().__init__(shape, initializer=initializer)
+        self.persistent = persistent
 
 class PRNG(object):
     """Just a stateful convenience wrapper for a jax PRNGKey."""
@@ -142,6 +154,7 @@ class Context(object):
     random: ContextRandom
     mode: str
     user: dict
+    buffers: Dict[str, jax.Array]
 
     def __init__(
         self,
@@ -150,12 +163,18 @@ class Context(object):
         *,
         mode: str = "train",
         user: dict | None = None,
+        buffers: Dict[str, jax.Array] | None = None,
     ):
         self.params = params
         self.rng = PRNG(key)
         self.random = ContextRandom(self.rng)
         self.mode = mode
-        self.user = dict(user or {})
+        if user is None:
+            user = {}
+        self.user = user
+        if buffers is None:
+            buffers = {}
+        self.buffers = buffers
 
     def train_mode_(self):
         self.mode = "train"
@@ -166,7 +185,13 @@ class Context(object):
         return self
 
     def __getitem__(self, par):
-        if isinstance(par, Param):
+        if isinstance(par, Buffer):
+            if par.name is None:
+                raise ValueError("Buffer has no name, did you forget to assign it to a Module?")
+            if par.name not in self.buffers:
+                raise KeyError(f"Buffer {par.name} not found in Context")
+            return self.buffers[par.name]
+        elif isinstance(par, Param):
             if par.name is None:
                 raise ValueError("Param has no name, did you forget to assign it to a Module?")
             return self.params[par.name]
@@ -176,7 +201,11 @@ class Context(object):
             raise TypeError("Expected a Param for indexing into Context")
 
     def __setitem__(self, par, value):
-        if isinstance(par, Param):
+        if isinstance(par, Buffer):
+            if par.name is None:
+                raise ValueError("Buffer has no name, did you forget to assign it to a Module?")
+            self.buffers[par.name] = value
+        elif isinstance(par, Param):
             if par.name is None:
                 raise ValueError("Param has no name, did you forget to assign it to a Module?")
             self.params[par.name] = value
@@ -186,7 +215,7 @@ class Context(object):
             raise TypeError("Expected a Param for indexing into Context")
 
     def freeze(self):
-        return FrozenContext(self.params, self.rng.key, mode=self.mode, user=self.user)
+        return FrozenContext(self.params, self.rng.key, mode=self.mode, user=self.user, buffers=self.buffers)
 
 
 @jax.tree_util.register_dataclass
@@ -197,15 +226,17 @@ class FrozenContext(object):
     params: Dict[str, jax.Array]
     key: jax.Array
     mode: str = field(metadata=dict(static=True))
+    buffers: Dict[str, jax.Array]
     user: dict
 
     def thaw(self):
-        return Context(self.params, self.key, mode=self.mode, user=self.user)
+        return Context(self.params, self.key, mode=self.mode, user=self.user, buffers=self.buffers)
 
-    def thaw_into(self, cx):
+    def thaw_into(self, cx: Context):
         cx.rng.key = self.key
-        cx.params.update(self.params)
-        cx.user = dict(self.user)
+        cx.params = self.params
+        cx.user = self.user
+        cx.buffers = self.buffers
         return cx
 
 
@@ -271,29 +302,48 @@ class Module(object):
     name: str | None
     _modules: OrderedDict[str, Module]
     _params: OrderedDict[str, Param]
+    _buffers: OrderedDict[str, Buffer]
 
     def __init__(self):
         self.name = None
         self._modules = OrderedDict()
         self._params = OrderedDict()
+        self._buffers = OrderedDict()
+
+    def register_module(self, name: str, mod: Module):
+        if not hasattr(self, "_modules"):
+            raise ValueError(
+                f"Must call super().__init__() in {self.__class__.__name__} before adding submodules."
+            )
+        self._modules[name] = mod
+        mod.set_name(self.name + "." + name if self.name else name)
+        super().__setattr__(name, mod)
+
+    def register_buffer(self, name: str, buf: Buffer):
+        if not hasattr(self, "_buffers"):
+            raise ValueError(
+                f"Must call super().__init__() in {self.__class__.__name__} before adding buffers."
+            )
+        self._buffers[name] = buf
+        buf.set_name(self.name + "." + name if self.name else name)
+        super().__setattr__(name, buf)
+
+    def register_param(self, name: str, par: Param):
+        if not hasattr(self, "_params"):
+            raise ValueError(
+                f"Must call super().__init__() in {self.__class__.__name__} before adding parameters."
+            )
+        self._params[name] = par
+        par.set_name(self.name + "." + name if self.name else name)
+        super().__setattr__(name, par)
 
     def __setattr__(self, name: str, value: Any):
         if isinstance(value, Module):
-            if not hasattr(self, "_modules"):
-                raise ValueError(
-                    f"Must call super().__init__() in {self.__class__.__name__} before adding submodules."
-                )
-            self._modules[name] = value
-            value.set_name(self.name + "." + name if self.name else name)
-            super().__setattr__(name, value)
+            self.register_module(name, value)
+        elif isinstance(value, Buffer):
+            self.register_buffer(name, value)
         elif isinstance(value, Param):
-            if not hasattr(self, "_params"):
-                raise ValueError(
-                    f"Must call super().__init__() in {self.__class__.__name__} before adding parameters."
-                )
-            self._params[name] = value
-            value.set_name(self.name + "." + name if self.name else name)
-            super().__setattr__(name, value)
+            self.register_param(name, value)
         else:
             super().__setattr__(name, value)
 
@@ -306,6 +356,8 @@ class Module(object):
         for k, v in self._modules.items():
             v.set_name(name + "." + k if name else k)
         for k, v in self._params.items():
+            v.set_name(name + "." + k if name else k)
+        for k, v in self._buffers.items():
             v.set_name(name + "." + k if name else k)
 
     def __call__(self, cx: Context, *args, **kwargs):
@@ -324,8 +376,10 @@ class Module(object):
             mod.setup(cx)
         for name, par in self._params.items():
             par.setup(cx)
+        for name, buf in self._buffers.items():
+            buf.setup(cx)
 
-    def initialize(self, key: jax.Array) -> dict[str, jax.Array]:
+    def initialize(self, key: jax.Array, *, return_buffers: bool = False) -> dict[str, jax.Array] | tuple[dict[str, jax.Array], dict[str, jax.Array]]:
         """Initialize the model.
 
         You could jit this to control where the parameters are stored, or to avoid
@@ -333,19 +387,21 @@ class Module(object):
         """
         cx = Context({}, key)
         self.setup(cx)
+        if return_buffers:
+            return cx.params, cx.buffers
         return cx.params
 
-    def init_weights(self, key):
-        return self.initialize(key)
+    def init_weights(self, key: jax.Array, *, return_buffers: bool = False):
+        return self.initialize(key, return_buffers=return_buffers)
 
-    def gen_named_modules(self):
+    def gen_named_modules(self) -> Generator[Tuple[str, Module]]:
         "Yields (str, Module) for all descendants of this module."
         for name, val in self._modules.items():
             yield (name, val)
             for k, v in val.gen_named_modules():
                 yield (name + "." + k, v)
 
-    def gen_named_parameters(self):
+    def gen_named_parameters(self) -> Generator[Tuple[str, Param]]:
         "Yields (str, Param) for this module and all descendants."
         for name, par in self._params.items():
             yield (name, par)
@@ -354,11 +410,23 @@ class Module(object):
             for k, v in mod.gen_named_parameters():
                 yield (name + "." + k, v)
 
+    def gen_named_buffers(self) -> Generator[Tuple[str, Buffer]]:
+        "Yields (str, Buffer) for this module and all descendants."
+        for name, buf in self._buffers.items():
+            yield (name, buf)
+
+        for name, mod in self._modules.items():
+            for k, v in mod.gen_named_buffers():
+                yield (name + "." + k, v)
+
     def named_parameters(self):
         return list(self.gen_named_parameters())
 
     def named_modules(self):
         return list(self.gen_named_modules())
+
+    def named_buffers(self):
+        return list(self.gen_named_buffers())
 
     def modules(self):
         return [m for (k, m) in self.gen_named_modules()]
@@ -366,29 +434,54 @@ class Module(object):
     def parameters(self):
         return [p for (k, p) in self.gen_named_parameters()]
 
-    def state_dict(self, params):
-        return {name: params[par.name] for (name, par) in self.gen_named_parameters()}
+    def buffers(self):
+        return [b for (k, b) in self.gen_named_buffers()]
 
-    def load_state_dict(self, params, state, strict=True):
-        """Load a previously saved state_dict into params. Returns params."""
+    def state_dict(self, params: Dict[str, jax.Array], buffers: Dict[str, jax.Array] | None = None) -> Dict[str, jax.Array]:
+        state_dict = {name: params[par.get_name()] for (name, par) in self.gen_named_parameters()}
+        if buffers is not None:
+            state_dict.update({name: buffers[buf.get_name()] for (name, buf) in self.gen_named_buffers() if buf.persistent})
+        return state_dict
+
+    def load_state_dict_cx(self, cx: Context, state_dict: Dict[str, jax.Array], strict: bool = True):
+        """Load a previously saved state_dict into the context. Loads params and buffers."""
         for k, p in self.gen_named_parameters():
-            if k not in state:
+            if k not in state_dict:
                 if strict:
-                    raise ValueError(f"Not loading missing parameter: {k}")
+                    raise ValueError(f"Missing parameter in state_dict: {k}")
                 else:
                     print(f"Not loading missing parameter: {k}", file=sys.stderr)
                     continue
-
-            if tuple(p.shape) != tuple(state[k].shape):
-                msg = f"Not loading parameter from incompatible shape: {k} ({p.shape} vs {state[k].shape})"
+            if tuple(p.shape) != tuple(state_dict[k].shape):
+                msg = f"Not loading parameter from incompatible shape: {k} ({p.shape} vs {state_dict[k].shape})"
                 if strict:
                     raise ValueError(msg)
                 else:
                     print(msg, file=sys.stderr)
                     continue
+            cx[p] = state_dict[k]
+        for k, buf in self.gen_named_buffers():
+            if not buf.persistent:
+                continue
+            if k not in state_dict:
+                if strict:
+                    raise ValueError(f"Missing buffer in state_dict: {k}")
+                else:
+                    print(f"Not loading missing buffer: {k}", file=sys.stderr)
+                    continue
+            if tuple(buf.shape) != tuple(state_dict[k].shape):
+                if strict:
+                    raise ValueError(f"Not loading buffer from incompatible shape: {k} ({buf.shape} vs {state_dict[k].shape})")
+                else:
+                    print(f"Not loading buffer from incompatible shape: {k} ({buf.shape} vs {state_dict[k].shape})", file=sys.stderr)
+                    continue
+            cx[buf] = state_dict[k]
 
-            params[p.name] = jax.numpy.asarray(state[k])
-        return params
+    def load_state_dict(self, params: Dict[str, jax.Array], state: Dict[str, jax.Array], strict: bool = True) -> Dict[str, jax.Array]:
+        """Load a previously saved state_dict into params. Returns params."""
+        cx = Context(params, None)
+        self.load_state_dict_cx(cx, state, strict=strict)
+        return cx.params
 
     def _get_name(self):
         return self.__class__.__name__

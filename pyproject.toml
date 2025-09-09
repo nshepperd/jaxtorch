@@ -17,13 +17,10 @@ classifiers = [
     "Programming Language :: Python :: 3.9",
 ]
 
-dependencies = [
-    "jax", 
-    "einops"
-]
+dependencies = ["numpy", "jax>=0.4.38"]
 
 [dependency-groups]
-test = ["pytest", "torch", "cbor2", "jax[cuda12]"]
+test = ["pytest", "torch", "cbor2", "jax[cuda12]", "einops"]
 demo = ["tqdm", "optax", "jax[cuda12]", "ipykernel"]
 
 [project.urls]
